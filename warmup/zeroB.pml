@@ -31,5 +31,6 @@ init {
     }   
 }
 
-ltl { [](found -> !(<>(!found))) }
+ltl p1 { <>found }
+ltl p2 { [](found -> !(<>(!found))) }
 
