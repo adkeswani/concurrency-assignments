@@ -1,10 +1,10 @@
 #include "fdef.h"
 
-bool foun = false
+bool found = false
 
 proctype P() {
     byte i = 0;
-    fount = false;
+    found = false;
 
     do
         :: (found) -> break
@@ -16,7 +16,7 @@ proctype P() {
 
 proctype Q() {
     byte j = 1;
-    fount = false;
+    found = false;
 
     do
         :: (found) -> break
@@ -32,3 +32,5 @@ init {
         run Q()
     }   
 }
+
+ltl p0 { [] ( found -> [] found ) }
