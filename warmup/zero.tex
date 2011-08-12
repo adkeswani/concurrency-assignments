@@ -7,6 +7,10 @@
 \usepackage{url}            % Nicer URL formatting
 \usepackage{new3151defs}    % COMP[39]151 defs
 
+% Automata package
+\usepackage{tikz}
+\usetikzlibrary{automata, positioning}
+
 % Page header
 %\pagestyle{fancy}
 %\lhead{COMP[39]151 Warmup Assignment
@@ -40,5 +44,28 @@
 %\begin{lstlisting}
 %\end{lstlisting}
 
+%\begin{figure}[H]
+%   \centering
+%   \begin{tikzpicture}[->,shorten >=1pt,node distance=3cm,on grid,auto]
+%      %\tikzstyle{vertex}=[circle,fill=black!25,minimum size=17pt,inner sep=5pt]
+%      %\tikzstyle{state}=[fill=gray,text=black,circle]
+%
+%      \node[state,initial]    (q0)                    {$q_0$};
+%      \node[state]            (in)     [right=of q0]  {booth};
+%      \node[state]            (falsum) [above=of in]  {$\bot$};
+%      \node[state,accepting]  (dial)   [right=of in]  {dial};
+%
+%      \path (q0)     edge [loop below]    node {walk}       (q0)
+%                     edge                 node {enter}      (in)
+%                     edge                 node {dial}       (falsum)
+%            (in)     edge                 node {dial}       (dial)
+%                     edge [loop below]    node {enter}      (in)
+%                     edge                 node {walk}       (falsum)
+%            (dial)   edge [loop below]    node {dial,enter} (dial)
+%                     edge                 node {walk}       (falsum);
+%            %(falsum) edge [loop above]    node {*}          (falsum);
+%   \end{tikzpicture}
+%   \caption{a (deterministic) FSM for `corridor world'}
+%\end{figure}
 
 \end{document}
