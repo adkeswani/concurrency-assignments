@@ -9,11 +9,10 @@ proctype P() {
     do
         :: (found) -> break
         :: else ->
-            pTurnA: (turn == 1);
-            pTurnB: turn = 2;
-
+pTurnChange: 
+            d_step { (turn == 1); turn = 2 }
+pAfterTurnChange:
             i = i + 1;
-
             if
                 :: (f(i) == 0) -> found = true
                 :: else -> skip
@@ -27,11 +26,10 @@ proctype Q() {
     do
         :: (found) -> break
         :: else ->
-            qTurnA: (turn == 2);
-            qTurnB: turn = 1;
-    
+qTurnChange:
+            d_step { (turn == 2); turn = 1 }
+qAfterTurnChange:
             j = j - 1;
-    
             if
                 :: (f(j) == 0) -> found = true
                 :: else -> skip
@@ -46,4 +44,4 @@ init {
     }
 }
 
-ltl p0 { [] ( ( <> found ) && ( found -> [] found ) && ( P@pTurnA -> <> P@pTurnB ) && ( Q@qTurnA -> <> Q@qTurnB ) ) }
+ltl p0 { [] ( ( <> found ) && ( found -> [] found ) && ( P@pTurnChange -> <> P@pAfterTurnChange ) && ( Q@qTurnChange -> <> Q@qAfterTurnChange ) ) }
