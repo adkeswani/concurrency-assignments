@@ -35,7 +35,4 @@ init {
     }   
 }
 
-ltl p1 { <>found }
-ltl p2 { [](found -> !(<>(!found))) }
-ltl p0 { [] ( found -> [] found ) }
-
+ltl p0 { [] ( ( <> found ) && ( found -> [] found ) ) }

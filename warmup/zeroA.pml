@@ -1,6 +1,6 @@
 #include "fdef.h"
 
-bool found = false
+bool found;
 
 proctype P() {
     byte i = 0;
@@ -33,4 +33,4 @@ init {
     }   
 }
 
-ltl p0 { [] ( found -> [] found ) }
+ltl p0 { [] ( ( <> found ) && ( found -> [] found ) ) }
