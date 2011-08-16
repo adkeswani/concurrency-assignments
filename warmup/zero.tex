@@ -6,6 +6,7 @@
 \usepackage{mdwlist}        % List related commands
 \usepackage{url}            % Nicer URL formatting
 \usepackage{new3151defs}    % COMP[39]151 defs
+\usepackage{fancyvrb}
 
 % Automata package
 \usepackage{tikz}
@@ -25,66 +26,87 @@
 \begin{document}
 
 \title{COMP[39]151 Warm-up assignment}
-\author{Adi? ?(?) \\ 
-        \texttt{?@cse.unsw.edu.au} \\ 
+\author{Aditya Keswani (z3242379) \\ 
+        \texttt{akeswani@cse.unsw.edu.au} \\ 
         and \\ 
         Timothy Wiley (z3109831) \\
         \texttt{timothyw@cse.unsw.edu.au} }
 
 \maketitle
 
-%\begin{align}
-%  \Not \Always \psi \Eventually y < 5 \Implies v \leq 5
-%  &\not\Implies \Next z \Until s \And p \Or \phi\\ 
-%  &\Equiv\delta \in \Real\\
-%  &\Implies \gamma \geq 10\\
-%  & \Exi{x \notin \Integer}{x < \text{Rupert}}
-%\end{align}
-
-%\begin{lstlisting}
-%\end{lstlisting}
-
-%\begin{figure}[H]
-%   \centering
-%   \begin{tikzpicture}[->,shorten >=1pt,node distance=3cm,on grid,auto]
-%      %\tikzstyle{vertex}=[circle,fill=black!25,minimum size=17pt,inner sep=5pt]
-%      %\tikzstyle{state}=[fill=gray,text=black,circle]
-%
-%      \node[state,initial]    (q0)                    {$q_0$};
-%      \node[state]            (in)     [right=of q0]  {booth};
-%      \node[state]            (falsum) [above=of in]  {$\bot$};
-%      \node[state,accepting]  (dial)   [right=of in]  {dial};
-%
-%      \path (q0)     edge [loop below]    node {walk}       (q0)
-%                     edge                 node {enter}      (in)
-%                     edge                 node {dial}       (falsum)
-%            (in)     edge                 node {dial}       (dial)
-%                     edge [loop below]    node {enter}      (in)
-%                     edge                 node {walk}       (falsum)
-%            (dial)   edge [loop below]    node {dial,enter} (dial)
-%                     edge                 node {walk}       (falsum);
-%            %(falsum) edge [loop above]    node {*}          (falsum);
-%   \end{tikzpicture}
-%   \caption{a (deterministic) FSM for `corridor world'}
-%\end{figure}
-
 \section{Question 1}
 
-\subsection{Part A}
+\subsection{Algorithms ZeroA, ZeroB and ZeroC}
 
-Our implementation is:
+\subsubsection{Promela implementations}
+
+\textbf{ZeroA}
 \lstinputlisting{zeroA.pml}
-%\begin{lstlisting}
-%\end{lstlisting}
 
-\subsection{Part B}
+\textbf{ZeroB}
+\lstinputlisting{zeroB.pml}
 
-\subsection{Part C}
+\textbf{ZeroC}
+\lstinputlisting{zeroC.pml}
 
-\subsection{Part D}
+\subsubsection{LTL formula}
 
-\subsection{Part E}
+The LTL formula we use to test the correctness of these algorithms is:
+\begin{align} \Always ( ( \Eventually found ) \And ( found \Implies \Always found ) ) \end{align}
+
+Found is only set to true when one of the processes finds the zero. Therefore, the first part of this formula, 
+\begin{align} \Eventually found \end{align}
+ensures that one of the processes does eventually find the zero. 
+
+The second part of this formula, 
+\begin{align} found \Implies \Always found \end{align} 
+ensures that after one of the processes finds the zero and sets found to true, it will remain true. Since found is the guard on the loop in both processes, this means that both processes will exit their loops and terminate after this occurs.
+
+Finally, the outer \(\Always\) ensures that these parts of the formula are satisfied in all states. Without this, the formula would only need to be satisfied in one state for the program to pass checking.
+
+\subsubsection{Spin output}
+\textbf{ZeroA}
+\VerbatimInput{output/zeroAOutput}
+\textbf{ZeroB}
+\VerbatimInput{output/zeroBOutput}
+\textbf{ZeroC}
+\VerbatimInput{output/zeroCOutput}
+
+\subsection{Algorithms ZeroD and ZeroE}
+
+\subsubsection{Promela implementations}
+
+\textbf{ZeroD}
+\lstinputlisting{zeroD.pml}
+
+\textbf{ZeroE}
+\lstinputlisting{zeroE.pml}
+
+\subsubsection{LTL formula}
+
+The LTL formula we use to test the correctness of these algorithms is:
+\begin{align} 
+\Always ( ( \Eventually found ) \And ( found \Implies \Always found )\notag\\
+\And ( P@pTurnChange \Implies \Eventually P@pAfterTurnChange )\\
+\And ( Q@qTurnChange \Implies \Eventually Q@qAfterTurnChange ) )\notag
+\end{align}
+
+The first two parts of this formula are the same as those used for algorithms ZeroA, ZeroB and ZeroC and are explained above. However, these cannot prevent a program from permanently blocking inside its await statement (and never terminating) after found has been set to true. The latter two parts of the formula,
+\begin{align} 
+( P@pTurnChange \Implies \Eventually P@pAfterTurnChange )\notag\\
+\And ( Q@qTurnChange \Implies \Eventually Q@qAfterTurnChange ) 
+\end{align}
+prevent this by ensuring that if a process enters its await statement, it eventually exits it.
+
+\subsubsection{Spin output}
+
+\textbf{ZeroD}
+\VerbatimInput{output/zeroDOutput}
+
+\textbf{ZeroE}
+\VerbatimInput{output/zeroEOutput}
 
 \section{Question 2}
+
 
 \end{document}

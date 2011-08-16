@@ -1,0 +1,23 @@
+The verification output was:
+pan:1: end state in claim reached (at depth 20)
+
+The simulation output was:
+Starting P with pid 2
+  2:    proc  0 (:init:) zeroA.pml:31 (state 1) [(run P())]
+Starting Q with pid 3
+  3:    proc  0 (:init:) zeroA.pml:32 (state 2) [(run Q())]
+  5:    proc  2 (Q) zeroA.pml:19 (state 1)  [found = 0]
+  7:    proc  2 (Q) zeroA.pml:23 (state 4)  [else]
+  9:    proc  2 (Q) zeroA.pml:24 (state 5)  [j = (j-1)]
+ 11:    proc  2 (Q) zeroA.pml:25 (state 6)  [found = (j==0)]
+ 13:    proc  2 (Q) zeroA.pml:22 (state 2)  [(found)]
+ 15: proc 2 terminates
+ 17:    proc  1 (P) zeroA.pml:7 (state 1)   [found = 0]
+ 19:    proc  1 (P) zeroA.pml:11 (state 4)  [else]
+ 21:    proc  1 (P) zeroA.pml:12 (state 5)  [i = (i+1)]
+spin: trail ends after 21 steps
+\#processes: 2
+ 21:    proc  1 (P) zeroA.pml:13 (state 6)
+ 21:    proc  0 (:init:) zeroA.pml:34 (state 4)
+
+(At 11, Q sets found to true. At 17, P sets found to false, so the claim is violated.)

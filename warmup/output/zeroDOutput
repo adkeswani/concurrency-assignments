@@ -1,0 +1,38 @@
+The verification output was:
+pan:1: acceptance cycle (at depth 39)
+
+The simulation output was:
+Starting P with pid 2
+  2:    proc  0 (:init:) zeroD.pml:42 (state 1) [(run P())]
+Starting Q with pid 3
+  3:    proc  0 (:init:) zeroD.pml:43 (state 2) [(run Q())]
+  5:    proc  2 (Q) zeroD.pml:28 (state 3)  [else]
+  7:    proc  1 (P) zeroD.pml:11 (state 3)  [else]
+  9:    proc  1 (P) zeroD.pml:13 (state 6)  [((turn==1))]
+  9:    proc  1 (P) zeroD.pml:13 (state 5)  [turn = 2]
+ 11:    proc  2 (Q) zeroD.pml:30 (state 6)  [((turn==2))]
+ 11:    proc  2 (Q) zeroD.pml:30 (state 5)  [turn = 1]
+ 13:    proc  2 (Q) zeroD.pml:32 (state 7)  [j = (j-1)]
+ 15:    proc  2 (Q) zeroD.pml:34 (state 8)  [((j==0))]
+ 17:    proc  1 (P) zeroD.pml:15 (state 7)  [i = (i+1)]
+ 19:    proc  1 (P) zeroD.pml:18 (state 10) [else]
+ 21:    proc  1 (P) zeroD.pml:18 (state 11) [(1)]
+ 23:    proc  1 (P) zeroD.pml:11 (state 3)  [else]
+ 25:    proc  1 (P) zeroD.pml:13 (state 6)  [((turn==1))]
+ 25:    proc  1 (P) zeroD.pml:13 (state 5)  [turn = 2]
+ 27:    proc  1 (P) zeroD.pml:15 (state 7)  [i = (i+1)]
+ 29:    proc  1 (P) zeroD.pml:18 (state 10) [else]
+ 31:    proc  1 (P) zeroD.pml:18 (state 11) [(1)]
+ 33:    proc  1 (P) zeroD.pml:11 (state 3)  [else]
+ 35:    proc  2 (Q) zeroD.pml:34 (state 9)  [found = 1]
+ 37:    proc  2 (Q) zeroD.pml:27 (state 1)  [(found)]
+ 39: proc 2 terminates
+<<<<<START OF CYCLE>>>>>
+spin: trail ends after 41 steps
+\#processes: 2
+ 41:    proc  1 (P) zeroD.pml:13 (state 6)
+ 41:    proc  0 (:init:) zeroD.pml:45 (state 4)
+3 processes created
+Exit-Status 0
+
+(At 35, Q sets found to true. Then P becomes permanently stuck in its await because turn is never set to 1.)
