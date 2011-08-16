@@ -63,11 +63,67 @@ Finally, the outer \(\Always\) ensures that these parts of the formula are satis
 
 \subsubsection{Spin output}
 \textbf{ZeroA}
-\VerbatimInput{output/zeroAOutput}
+
+The verification output was:\\
+pan:1: end state in claim reached (at depth 20)\\
+\\
+The simulation output was:\\
+Starting P with pid 2\\
+  2:    proc  0 (:init:) zeroA.pml:31 (state 1) [(run P())]\\
+Starting Q with pid 3\\
+  3:    proc  0 (:init:) zeroA.pml:32 (state 2) [(run Q())]\\
+  5:    proc  2 (Q) zeroA.pml:19 (state 1)  [found = 0]\\
+  7:    proc  2 (Q) zeroA.pml:23 (state 4)  [else]\\
+  9:    proc  2 (Q) zeroA.pml:24 (state 5)  [j = (j-1)]\\
+ 11:    proc  2 (Q) zeroA.pml:25 (state 6)  [found = (j==0)]\\
+ 13:    proc  2 (Q) zeroA.pml:22 (state 2)  [(found)]\\
+ 15: proc 2 terminates\\
+ 17:    proc  1 (P) zeroA.pml:7 (state 1)   [found = 0]\\
+ 19:    proc  1 (P) zeroA.pml:11 (state 4)  [else]\\
+ 21:    proc  1 (P) zeroA.pml:12 (state 5)  [i = (i+1)]\\
+spin: trail ends after 21 steps\\
+\#processes: 2\\
+ 21:    proc  1 (P) zeroA.pml:13 (state 6)\\
+ 21:    proc  0 (:init:) zeroA.pml:34 (state 4)\\
+\\
+Explanation:\\
+At 11, Q sets found to true. \\
+At 17, P sets found to false, so the claim is violated.\\
+
 \textbf{ZeroB}
-\VerbatimInput{output/zeroBOutput}
+
+The verification output was:\\
+pan:1: end state in claim reached (at depth 22)\\
+\\
+The simulation output was:\\
+Starting P with pid 2\\
+  2:    proc  0 (:init:) zeroB.pml:29 (state 1) [(run P())]\\
+Starting Q with pid 3\\
+  3:    proc  0 (:init:) zeroB.pml:30 (state 2) [(run Q())]\\
+  5:    proc  2 (Q) zeroB.pml:21 (state 3)  [else]\\
+  7:    proc  2 (Q) zeroB.pml:22 (state 4)  [j = (j-1)]\\
+  9:    proc  1 (P) zeroB.pml:10 (state 3)  [else]\\
+ 11:    proc  1 (P) zeroB.pml:11 (state 4)  [i = (i+1)]\\
+ 13:    proc  2 (Q) zeroB.pml:23 (state 5)  [found = (j==0)]\\
+ 15:    proc  2 (Q) zeroB.pml:20 (state 1)  [(found)]\\
+ 17: proc 2 terminates\\
+ 19:    proc  1 (P) zeroB.pml:12 (state 5)  [found = (i==0)]\\
+ 21:    proc  1 (P) zeroB.pml:10 (state 3)  [else]\\
+spin: trail ends after 23 steps\\
+\#processes: 2\\
+ 23:    proc  1 (P) zeroB.pml:11 (state 4)\\
+ 23:    proc  0 (:init:) zeroB.pml:32 (state 4)\\
+3 processes created\\
+Exit-Status 0\\
+\\
+Explanation:\\
+At 13, Q sets found to true. \\
+At 19, P sets found to false, so the claim is violated.\\
+
 \textbf{ZeroC}
-\VerbatimInput{output/zeroCOutput}
+
+The verification output was:\\
+No errors found -- did you verify all claims?
 
 \subsection{Algorithms ZeroD and ZeroE}
 
@@ -97,9 +153,52 @@ prevent this by ensuring that if a process enters its await statement, it eventu
 \subsubsection{Spin output}
 
 \textbf{ZeroD}
-\VerbatimInput{output/zeroDOutput}
+
+The verification output was:\\
+pan:1: acceptance cycle (at depth 39)\\
+\\
+The simulation output was:\\
+Starting P with pid 2\\
+  2:    proc  0 (:init:) zeroD.pml:42 (state 1) [(run P())]\\
+Starting Q with pid 3\\
+  3:    proc  0 (:init:) zeroD.pml:43 (state 2) [(run Q())]\\
+  5:    proc  2 (Q) zeroD.pml:28 (state 3)  [else]\\
+  7:    proc  1 (P) zeroD.pml:11 (state 3)  [else]\\
+  9:    proc  1 (P) zeroD.pml:13 (state 6)  [((turn==1))]\\
+  9:    proc  1 (P) zeroD.pml:13 (state 5)  [turn = 2]\\
+ 11:    proc  2 (Q) zeroD.pml:30 (state 6)  [((turn==2))]\\
+ 11:    proc  2 (Q) zeroD.pml:30 (state 5)  [turn = 1]\\
+ 13:    proc  2 (Q) zeroD.pml:32 (state 7)  [j = (j-1)]\\
+ 15:    proc  2 (Q) zeroD.pml:34 (state 8)  [((j==0))]\\
+ 17:    proc  1 (P) zeroD.pml:15 (state 7)  [i = (i+1)]\\
+ 19:    proc  1 (P) zeroD.pml:18 (state 10) [else]\\
+ 21:    proc  1 (P) zeroD.pml:18 (state 11) [(1)]\\
+ 23:    proc  1 (P) zeroD.pml:11 (state 3)  [else]\\
+ 25:    proc  1 (P) zeroD.pml:13 (state 6)  [((turn==1))]\\
+ 25:    proc  1 (P) zeroD.pml:13 (state 5)  [turn = 2]\\
+ 27:    proc  1 (P) zeroD.pml:15 (state 7)  [i = (i+1)]\\
+ 29:    proc  1 (P) zeroD.pml:18 (state 10) [else]\\
+ 31:    proc  1 (P) zeroD.pml:18 (state 11) [(1)]\\
+ 33:    proc  1 (P) zeroD.pml:11 (state 3)  [else]\\
+ 35:    proc  2 (Q) zeroD.pml:34 (state 9)  [found = 1]\\
+ 37:    proc  2 (Q) zeroD.pml:27 (state 1)  [(found)]\\
+ 39: proc 2 terminates\\
+<<<<<START OF CYCLE>>>>>\\
+spin: trail ends after 41 steps\\
+\#processes: 2\\
+ 41:    proc  1 (P) zeroD.pml:13 (state 6)\\
+ 41:    proc  0 (:init:) zeroD.pml:45 (state 4)\\
+3 processes created\\
+Exit-Status 0\\
+
+Explanation:\\
+At 35, Q sets found to true. \\
+Then P becomes permanently stuck in its await because turn is never set to 1.\\
+
 \textbf{ZeroE}
-\VerbatimInput{output/zeroEOutput}
+
+The verification output was:\\
+No errors found -- did you verify all claims?
 
 \section{Question 2}
 We defined the Owicki/Gries style proof of the partial correctness of \texttt{zeroE} as
