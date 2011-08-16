@@ -22,4 +22,6 @@ spin: trail ends after 23 steps
 3 processes created
 Exit-Status 0
 
-(At 13, Q sets found to true. At 19, P sets found to false, so the claim is violated.)
+Explanation:
+At 13, Q sets found to true. 
+At 19, P sets found to false, so the claim is violated.

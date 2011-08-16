@@ -16,8 +16,10 @@ Starting Q with pid 3
  19:    proc  1 (P) zeroA.pml:11 (state 4)  [else]
  21:    proc  1 (P) zeroA.pml:12 (state 5)  [i = (i+1)]
 spin: trail ends after 21 steps
-\#processes: 2
+#processes: 2
  21:    proc  1 (P) zeroA.pml:13 (state 6)
  21:    proc  0 (:init:) zeroA.pml:34 (state 4)
 
-(At 11, Q sets found to true. At 17, P sets found to false, so the claim is violated.)
+Explanation:
+At 11, Q sets found to true. 
+At 17, P sets found to false, so the claim is violated.

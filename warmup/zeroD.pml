@@ -44,4 +44,6 @@ init {
     }
 }
 
-ltl p0 { [] ( ( <> found ) && ( found -> [] found ) && ( P@pTurnChange -> <> P@pAfterTurnChange ) && ( Q@qTurnChange -> <> Q@qAfterTurnChange ) ) }
+ltl p0 { [] ( ( <> found ) && ( found -> [] found ) && 
+            ( P@pTurnChange -> <> P@pAfterTurnChange ) && 
+            ( Q@qTurnChange -> <> Q@qAfterTurnChange ) ) }

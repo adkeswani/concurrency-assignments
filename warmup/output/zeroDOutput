@@ -29,10 +29,12 @@ Starting Q with pid 3
  39: proc 2 terminates
 <<<<<START OF CYCLE>>>>>
 spin: trail ends after 41 steps
-\#processes: 2
+#processes: 2
  41:    proc  1 (P) zeroD.pml:13 (state 6)
  41:    proc  0 (:init:) zeroD.pml:45 (state 4)
 3 processes created
 Exit-Status 0
 
-(At 35, Q sets found to true. Then P becomes permanently stuck in its await because turn is never set to 1.)
+Explanation:
+At 35, Q sets found to true. 
+Then P becomes permanently stuck in its await because turn is never set to 1.
