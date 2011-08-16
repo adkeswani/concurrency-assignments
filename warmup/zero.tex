@@ -42,13 +42,10 @@
 
 \textbf{ZeroA}
 \lstinputlisting{zeroA.pml}
-
 \textbf{ZeroB}
 \lstinputlisting{zeroB.pml}
-
 \textbf{ZeroC}
 \lstinputlisting{zeroC.pml}
-
 \subsubsection{LTL formula}
 
 The LTL formula we use to test the correctness of these algorithms is:
@@ -78,7 +75,6 @@ Finally, the outer \(\Always\) ensures that these parts of the formula are satis
 
 \textbf{ZeroD}
 \lstinputlisting{zeroD.pml}
-
 \textbf{ZeroE}
 \lstinputlisting{zeroE.pml}
 
@@ -86,15 +82,15 @@ Finally, the outer \(\Always\) ensures that these parts of the formula are satis
 
 The LTL formula we use to test the correctness of these algorithms is:
 \begin{align} 
-\Always ( ( \Eventually found ) \And ( found \Implies \Always found )\notag\\
-\And ( P@pTurnChange \Implies \Eventually P@pAfterTurnChange )\\
-\And ( Q@qTurnChange \Implies \Eventually Q@qAfterTurnChange ) )\notag
+\Always ( ( \Eventually found ) &\And ( found \Implies \Always found )\notag\\
+\And ( P@pTurnChange &\Implies \Eventually P@pAfterTurnChange )\\
+\And ( Q@qTurnChange &\Implies \Eventually Q@qAfterTurnChange ) )\notag
 \end{align}
 
 The first two parts of this formula are the same as those used for algorithms ZeroA, ZeroB and ZeroC and are explained above. However, these cannot prevent a program from permanently blocking inside its await statement (and never terminating) after found has been set to true. The latter two parts of the formula,
 \begin{align} 
-( P@pTurnChange \Implies \Eventually P@pAfterTurnChange )\notag\\
-\And ( Q@qTurnChange \Implies \Eventually Q@qAfterTurnChange ) 
+( P@pTurnChange &\Implies \Eventually P@pAfterTurnChange )\notag\\
+\And ( Q@qTurnChange &\Implies \Eventually Q@qAfterTurnChange ) 
 \end{align}
 prevent this by ensuring that if a process enters its await statement, it eventually exits it.
 
@@ -102,11 +98,9 @@ prevent this by ensuring that if a process enters its await statement, it eventu
 
 \textbf{ZeroD}
 \VerbatimInput{output/zeroDOutput}
-
 \textbf{ZeroE}
 \VerbatimInput{output/zeroEOutput}
 
 \section{Question 2}
-
 
 \end{document}
