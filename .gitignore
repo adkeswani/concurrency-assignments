@@ -3,3 +3,6 @@
 
 # Promela Files
 *.trail
+
+# Build files
+*.o
