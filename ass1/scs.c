@@ -30,6 +30,12 @@ unsigned int nAudience = 0;
 /* Number of dancers */
 unsigned int nDancers = 0;
 
+/* Counter of number of audience wanting to see a given dancer */
+unsigned int *toWatch;
+
+// Mutex
+pthread_mutex_t watchMutex = PTHREAD_MUTEX_INITIALIZER;
+
 /* Dancer A currently on stage */
 int dancerA;
 
@@ -39,6 +45,8 @@ int main(int argc, char** argv) {
     nAudience = 2;
     nDancers = 5;
     dancerA = NO_DANCER;
+    toWatch = malloc(nDancers * sizeof(int));
+    for(int i = 0; i < nDancers; i++) toWatch[i] = 0;
     printf("Number of dancers: %d\n", nDancers);
     printf("Number of audience members: %d\n", nAudience);
 
@@ -49,7 +57,7 @@ int main(int argc, char** argv) {
     pthread_t threads[nAudience];
     int rc;
     long t;
-    for(t=0; t < nAudience; t++){
+    for(t=0; t < nAudience; t++) {
         printf("Creating thread %ld\n", t);
         rc = pthread_create(&threads[t], NULL, runAudience, (void *)t);
         if (rc) {
@@ -78,6 +86,11 @@ void runDancers() {
         selectedDancerA = NO_DANCER;
 
         // TODO Select dancer from those wishing to be seen
+        for(int i = 0; selectedDancerA == NO_DANCER && i < nDancers; i++) {
+            if (toWatch[i] > 0) {
+                selectedDancerA = i;
+            }
+        }
         
         // If no waiting, select random dancer
         if (selectedDancerA == NO_DANCER) {
@@ -90,9 +103,12 @@ void runDancers() {
         
         // Dance
         printf("Now dancing on stage: %d\n", dancerA);
-        usleep(SEC2USEC(10));
+        usleep(SEC2USEC(5));
 
         // TODO Leave stage
+        pthread_mutex_lock(&watchMutex);
+        toWatch[dancerA] = 0;
+        pthread_mutex_unlock(&watchMutex);
         previousA = dancerA;
         dancerA = NO_DANCER;
     }
@@ -113,7 +129,10 @@ void *runAudience(void* idPtr) {
 
         // Select Dancer
         dancer = randomDancer();
+        pthread_mutex_lock(&watchMutex);
         printf("Audience %ld: Selected to watch dancer: %d\n", id, dancer);
+        toWatch[dancer]++;
+        pthread_mutex_unlock(&watchMutex);
 
         // TODO Watch
 
