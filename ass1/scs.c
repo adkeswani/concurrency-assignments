@@ -56,6 +56,9 @@ unsigned int *toWatch;
 // Array of semaphores for watching a given dancer
 sem_t *toWatchSemaphores;
 
+// Semaphore for audience members now watching the dancers
+sem_t nowWatchingSemaphore;
+
 // Dancer A currently on stage
 int dancerA;
 
@@ -87,14 +90,16 @@ int main(int argc, char** argv) {
     // Init Random number generator
     srand(time(NULL));
 
-    // Setup to Watch semaphores
+    // Setup Semaphores
     toWatchSemaphores = malloc(nDancers * sizeof(sem_t));
     for(i = 0; i != nDancers; i++) {
         printf("Initialising semaphore %d\n", i);
         if(sem_init(&toWatchSemaphores[i], 0, 0)) {
-            printf("Could not initialise semaphore: %d\n", i);
+            printf("***** Could not initialise semaphore: %d\n", i);
+            pthread_exit(-1);
         }
     }
+    sem_init(&nowWatchingSemaphore, 0, 0);
 
     // Spawn audience threads
     pthread_t threads[nAudience];
@@ -138,7 +143,7 @@ void runDancers() {
             }
         }
         
-        // If no waiting, select random dancer
+        // If no waiting, select dancer
         if (dancerA == NO_DANCER) {
             selectedDancerA = NEXTDANCER(previousA);
             while (selectedDancerA == previousA) {
@@ -165,7 +170,7 @@ void *runAudience(void* idPtr) {
     //printf("My Audience member Id: %ld\n", id);
 
     int sleepDuration = 1000;
-    int dancer = -1;
+    int dancer = NO_DANCER;
 
     while(1) {
         // Vegetate
@@ -189,7 +194,7 @@ void *runAudience(void* idPtr) {
         printf("****** Audience %ld: Now Watching dancer: %d\n", id, dancer);
 
         // TODO Observe leave
-        return NULL;
+        sem_wait(&nowWatchingSemaphore);
     }
 
     return NULL;
