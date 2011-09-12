@@ -72,18 +72,17 @@ int main(int argc, char** argv) {
     nAgedDancers = atoi(argv[N_AGED_DANCERS_ARG]);
     nAudience = atoi(argv[N_AUDIENCE_ARG]);
     nRounds = atoi(argv[N_ROUNDS_ARG]);
+    printf("Number of dancers: %d\n", nDancers);
+    printf("Number of pro dancers: %d\n", nProDancers);
+    printf("Number of aged dancers: %d\n", nAgedDancers);
+    printf("Number of audience members: %d\n", nAudience);
+    printf("Number of rounds: %d\n", nRounds);
 
     // Set global constants
     nDancers = 5;
     dancerA = NO_DANCER;
     toWatch = malloc(nDancers * sizeof(int));
     for(i = 0; i < nDancers; i++) toWatch[i] = 0;
-
-    printf("Number of dancers: %d\n", nDancers);
-    printf("Number of pro dancers: %d\n", nProDancers);
-    printf("Number of aged dancers: %d\n", nAgedDancers);
-    printf("Number of audience members: %d\n", nAudience);
-    printf("Number of rounds: %d\n", nRounds);
 
     // Init Random number generator
     srand(time(NULL));
@@ -183,9 +182,9 @@ void *runAudience(void* idPtr) {
         pthread_mutex_unlock(&watchMutex);
 
         // TODO Watch - Wait on semaphore
-        int semValue;
-        sem_getvalue(&toWatchSemaphores[dancer], &semValue);
-        printf("Audience %ld: Semaphore val: %d\n", id, semValue);
+        //int semValue;
+        //sem_getvalue(&toWatchSemaphores[dancer], &semValue);
+        //printf("Audience %ld: Semaphore val: %d\n", id, semValue);
         sem_wait(&toWatchSemaphores[dancer]);
         printf("****** Audience %ld: Now Watching dancer: %d\n", id, dancer);
 
