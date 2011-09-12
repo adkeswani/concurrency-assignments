@@ -32,8 +32,17 @@ void runDancers();
 
 // Shared Variables
 
+//Number of pro dancers
+unsigned int nProDancers = 0;
+
+//Number of aged dancers
+unsigned int nAgedDancers = 0;
+
 // Number of audience members
 unsigned int nAudience = 0;
+
+// Number of rounds
+unsigned int nRounds = 0;
 
 // Number of dancers
 unsigned int nDancers = 0;
@@ -59,10 +68,10 @@ int main(int argc, char** argv) {
     }
 
     // Set global constants
-    int nProDancers = atoi(argv[N_PRO_DANCERS_ARG]);
-    int nAgedDancers = atoi(argv[N_AGED_DANCERS_ARG]);
+    nProDancers = atoi(argv[N_PRO_DANCERS_ARG]);
+    nAgedDancers = atoi(argv[N_AGED_DANCERS_ARG]);
     nAudience = atoi(argv[N_AUDIENCE_ARG]);
-    int nRounds = atoi(argv[N_ROUNDS_ARG]);
+    nRounds = atoi(argv[N_ROUNDS_ARG]);
 
     // Set global constants
     nDancers = 5;
@@ -75,7 +84,6 @@ int main(int argc, char** argv) {
     printf("Number of aged dancers: %d\n", nAgedDancers);
     printf("Number of audience members: %d\n", nAudience);
     printf("Number of rounds: %d\n", nRounds);
-
 
     // Init Random number generator
     srand(time(NULL));
