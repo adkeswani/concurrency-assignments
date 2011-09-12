@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <pthread.h>
+#include <semaphore.h>
 
 // Constants
 #define NO_DANCER       -1
@@ -16,30 +17,34 @@
 
 // Methods
 
-/* Randomly select a dancer */
+// Randomly select a dancer
 int randomDancer();
 
-/* Single Audience member */
+// Single Audience member
 void *runAudience(void* id);
 
-/* Method for running dancer selection/dancing/leaving */
+// Method for running dancer selection/dancing/leaving
 void runDancers();
 
 // Shared Variables
 
-/* Number of audience members */
+// Number of audience members
 unsigned int nAudience = 0;
 
-/* Number of dancers */
+// Number of dancers
 unsigned int nDancers = 0;
 
-/* Counter of number of audience wanting to see a given dancer */
-unsigned int *toWatch;
-
-// Mutex
+// Mutex for changing variables associated with what audience members wish to watch
 pthread_mutex_t watchMutex = PTHREAD_MUTEX_INITIALIZER;
 
-/* Dancer A currently on stage */
+// Counter of number of audience wanting to see a given dancer
+unsigned int *toWatch;
+
+// Array of semaphores for watching a given dancer
+//sem_t *toWatchSemaphores;
+sem_t semaphore;
+
+// Dancer A currently on stage
 int dancerA;
 
 int main(int argc, char** argv) {
@@ -56,6 +61,21 @@ int main(int argc, char** argv) {
     // Init Random number generator
     srand(time(NULL));
 
+    // Setup to Watch semaphores
+    //toWatchSemaphores = malloc(nDancers * sizeof(sem_t));
+    //for(int i = 0; i != nDancers; i++) {
+    //    printf("Initialising semaphore %d\n", i);
+    //    sem_init(&toWatchSemaphores[i], 0, i);
+    //}
+    sem_t semaphore2;
+    sem_init(&semaphore, 0, 10);
+    if(sem_init(&semaphore2, 0, 10)) {
+        printf("##### Could not initialise semaphores\n");
+    }
+    int semValue;
+    sem_getvalue(&semaphore2, &semValue);
+    printf("value: %d\n", semValue);
+
     // Spawn audience threads
     pthread_t threads[nAudience];
     int rc;
@@ -70,7 +90,7 @@ int main(int argc, char** argv) {
     }
 
     // Start dancer method in this thread
-    runDancers();
+    //runDancers();
 
     pthread_exit(NULL);
 }
@@ -108,7 +128,7 @@ void runDancers() {
         
         // Dance
         printf("Now dancing on stage: %d\n", dancerA);
-        usleep(SEC2USEC(5));
+        usleep(SEC2USEC(1));
 
         // TODO Leave stage
         pthread_mutex_lock(&watchMutex);
@@ -130,7 +150,7 @@ void *runAudience(void* idPtr) {
         // Vegetate
         sleepDuration = rand() % SEC2USEC(10);
         printf("Audience %ld: Sleeping for %.2lf seconds\n", id, USEC2SEC(sleepDuration));
-        usleep(sleepDuration);
+        //usleep(sleepDuration);
         //usleep(SEC2USEC(20));
 
         // Select Dancer
@@ -140,9 +160,19 @@ void *runAudience(void* idPtr) {
         toWatch[dancer]++;
         pthread_mutex_unlock(&watchMutex);
 
-        // TODO Watch
+        // TODO Watch - Wait on semaphore
+        int semValue;
+        sem_getvalue(&semaphore, &semValue);
+        printf("Audience %ld: Semaphore val: %d\n", id, semValue);
+        sem_wait(&semaphore);
+        printf("****** Audience %ld: Now Watching dancer: %d\n", id, dancer);
+        //sem_getvalue(&toWatchSemaphores[dancer], &semValue);
+        //printf("Audience %ld: Semaphore val: %d\n", id, semValue);
+        //sem_wait(&toWatchSemaphores[dancer]);
+        //printf("****** Audience %ld: Now Watching dancer: %d\n", id, dancer);
 
         // TODO Observe leave
+        return NULL;
     }
 
     return NULL;
