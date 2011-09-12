@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
     }
 
     // Start dancer method in this thread
-    //runDancers();
+    runDancers();
 
     pthread_exit(NULL);
 }
