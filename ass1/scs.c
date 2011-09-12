@@ -9,6 +9,10 @@
 
 // Constants
 #define NO_DANCER       -1
+#define N_PRO_DANCERS_ARG  1
+#define N_AGED_DANCERS_ARG 2
+#define N_AUDIENCE_ARG 3
+#define N_ROUNDS_ARG 4
 
 // Macros
 #define SEC2USEC(n)     (n * 1000000)
@@ -48,15 +52,31 @@ sem_t semaphore;
 int dancerA;
 
 int main(int argc, char** argv) {
+    if (argc != 5) {
+        printf("Usage: ./scs numProDancers numAgedDancers numAudienceMembers numRounds\n");
+        return 0;
+    }
 
     // Set global constants
-    nAudience = 2;
+    int nProDancers = atoi(argv[N_PRO_DANCERS_ARG]);
+    int nAgedDancers = atoi(argv[N_AGED_DANCERS_ARG]);
+    int nAudience = atoi(argv[N_AUDIENCE_ARG]);
+    int nRounds = atoi(argv[N_ROUNDS_ARG]);
+
+    // Set global constants
     nDancers = 5;
     dancerA = NO_DANCER;
     toWatch = malloc(nDancers * sizeof(int));
-    for(int i = 0; i < nDancers; i++) toWatch[i] = 0;
+    int i;
+    for(i = 0; i < nDancers; i++) toWatch[i] = 0;
+
     printf("Number of dancers: %d\n", nDancers);
+    printf("Number of pro dancers: %d\n", nProDancers);
+    printf("Number of aged dancers: %d\n", nAgedDancers);
     printf("Number of audience members: %d\n", nAudience);
+    printf("Number of rounds: %d\n", nRounds);
+
+ 
 
     // Init Random number generator
     srand(time(NULL));
@@ -111,7 +131,8 @@ void runDancers() {
 
         // TODO Select dancer from those wishing to be seen
         selectedDancerA = NEXTDANCER(previousA);
-        for(int i = 0; i < nDancers; i++, selectedDancerA = NEXTDANCER(selectedDancerA)) { // Need this loop format as prev could be NO_DANCER
+        int i;
+        for(i = 0; i < nDancers; i++, selectedDancerA = NEXTDANCER(selectedDancerA)) { // Need this loop format as prev could be NO_DANCER
             if (toWatch[i] > 0 && selectedDancerA != previousA) {
                 dancerA = i;
             }

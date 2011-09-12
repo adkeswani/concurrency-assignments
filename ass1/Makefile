@@ -10,9 +10,9 @@ OBJS=$(SRCS:.c=.o)
 
 # Compilation variables
 CC=gcc
-BUILDFLAGS=-g3 -Wall -Werror -std=c99
+BUILDFLAGS=-g3 -Wall -Werror
 CFLAGS+=$(BUILDFLAGS)
-LDFLAGS+=-lpthread
+LDFLAGS+=-lpthread -lrt
 
 # Program build
 $(PROGRAM): $(OBJS)
