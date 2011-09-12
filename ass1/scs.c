@@ -6,10 +6,13 @@
 
 #include <pthread.h>
 
+// Constants
+#define NO_DANCER       -1
+
+// Macros
 #define SEC2USEC(n)     (n * 1000000)
 #define USEC2SEC(n)     (n / 1000000.0)
-
-#define NO_DANCER       -1
+#define NEXTDANCER(n)   ((n+1) % nDancers)
 
 // Methods
 
@@ -84,19 +87,21 @@ void runDancers() {
 
     while(1) {
         selectedDancerA = NO_DANCER;
+        dancerA = NO_DANCER;
 
         // TODO Select dancer from those wishing to be seen
-        for(int i = 0; selectedDancerA == NO_DANCER && i < nDancers; i++) {
-            if (toWatch[i] > 0) {
-                selectedDancerA = i;
+        selectedDancerA = NEXTDANCER(previousA);
+        for(int i = 0; i < nDancers; i++, selectedDancerA = NEXTDANCER(selectedDancerA)) { // Need this loop format as prev could be NO_DANCER
+            if (toWatch[i] > 0 && selectedDancerA != previousA) {
+                dancerA = i;
             }
         }
         
         // If no waiting, select random dancer
-        if (selectedDancerA == NO_DANCER) {
-            selectedDancerA = randomDancer();
+        if (dancerA == NO_DANCER) {
+            selectedDancerA = NEXTDANCER(previousA);
             while (selectedDancerA == previousA) {
-                selectedDancerA = randomDancer();
+                selectedDancerA = NEXTDANCER(selectedDancerA);
             }
         }
         dancerA = selectedDancerA;
@@ -126,6 +131,7 @@ void *runAudience(void* idPtr) {
         sleepDuration = rand() % SEC2USEC(10);
         printf("Audience %ld: Sleeping for %.2lf seconds\n", id, USEC2SEC(sleepDuration));
         usleep(sleepDuration);
+        //usleep(SEC2USEC(20));
 
         // Select Dancer
         dancer = randomDancer();
