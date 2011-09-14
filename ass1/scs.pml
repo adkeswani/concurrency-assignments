@@ -8,7 +8,7 @@
 
 // Semaphore implementation (busy-wait)
 #define sem_init(S)   S = 0
-#define sem_wait(S)   d_step {S > 0; s--}
+#define sem_wait(S)   d_step {S > 0; S--}
 #define sem_signal(S) S++
 
 // Semaphores
@@ -29,6 +29,7 @@ proctype audience() {
                :: dancer = 5
            fi;
            /* wait on semaphore */
+           sem_wait(toWatchSems[dancer]);
            /* next round */
            round++
     od
