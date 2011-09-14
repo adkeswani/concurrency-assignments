@@ -257,13 +257,13 @@ void runDancers() {
 
 void *runAudience(void* idPtr) {
     long id = (long) idPtr;
-    //printf("My Audience member Id: %ld\n", id);
-
     int sleepDuration = 1000;
+    int roundsCompleted = 0;
     int dancer = NO_DANCER;
 
-    while(1) {
+    for (roundsCompleted = 0; roundsCompleted != nRounds || nRounds == 0; roundsCompleted++) {
         // Vegetate
+        printf("Audience %ld: Beginning vegetation \n", id);
         sleepDuration = rand() % SEC2USEC(10);
         printf("Audience %ld: Sleeping for %.2lf seconds\n", id, USEC2SEC(sleepDuration));
         usleep(sleepDuration);
@@ -286,8 +286,9 @@ void *runAudience(void* idPtr) {
         pthread_mutex_lock(&noWatchingMutex);
         noWatching--;
         pthread_mutex_unlock(&noWatchingMutex);
-        printf("Audience %ld: Returning to vegetation \n", id);
     }
+    printf("Audience %ld: Finished %d rounds, dying now.\n", id, nRounds);
+    
 
     return NULL;
 }
