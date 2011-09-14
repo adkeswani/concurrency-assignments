@@ -49,17 +49,23 @@ unsigned int nRounds = 0;
 // Number of dancers
 unsigned int nDancers = 0;
 
+// Dancers currently on stage
+int dancerAged, dancerProOrAged;
+
+// Number of audience members watching
+unsigned int noWatching;
+
 // Mutex for changing variables associated with what audience members wish to watch
 pthread_mutex_t watchMutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Mutex for changing the noWatching value
+pthread_mutex_t noWatchingMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Array of semaphores for watching a given dancer
 sem_t *toWatchSemaphores;
 
 // Semaphore for audience members now watching the dancers
 sem_t nowWatchingSemaphore;
-
-// Dancers currently on stage
-int dancerAged, dancerProOrAged;
 
 int main(int argc, char** argv) {
     int i;
@@ -74,6 +80,7 @@ int main(int argc, char** argv) {
     nAgedDancers = atoi(argv[N_AGED_DANCERS_ARG]);
     nAudience = atoi(argv[N_AUDIENCE_ARG]);
     nRounds = atoi(argv[N_ROUNDS_ARG]);
+    noWatching = 0;
     printf("Number of pro dancers: %d\n", nProDancers);
     printf("Number of aged dancers: %d\n", nAgedDancers);
     printf("Number of audience members: %d\n", nAudience);
@@ -130,7 +137,6 @@ void runDancers() {
     int previousProOrAged = NO_DANCER;
     int i;
     int toWatchSemValue;
-    int numberWatching = 0;
 
     while(1) {
         selectedDancerAged = NO_DANCER;
@@ -192,8 +198,12 @@ void runDancers() {
 
         printf("Selected dancers. Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
 
+        // Wait for previous audience members to leave
+        while (noWatching != 0) {};
+
         // Notify Audience members to watch
         pthread_mutex_lock(&watchMutex);
+        pthread_mutex_lock(&noWatchingMutex);
 
             /*What? Post is atomic...
             numberWatching = toWatch[dancerA];
@@ -209,21 +219,22 @@ void runDancers() {
             */
     
             sem_getvalue(&toWatchSemaphores[dancerAged], &toWatchSemValue);
-            numberWatching = toWatchSemValue;
+            noWatching += toWatchSemValue;
             for (; toWatchSemValue > 0; toWatchSemValue--) {
                 sem_post(&toWatchSemaphores[dancerAged]);
             }
 
             sem_getvalue(&toWatchSemaphores[dancerProOrAged], &toWatchSemValue);
-            numberWatching += toWatchSemValue;
+            noWatching += toWatchSemValue;
             for (; toWatchSemValue > 0; toWatchSemValue--) {
                 sem_post(&toWatchSemaphores[dancerProOrAged]);
             }
+        pthread_mutex_unlock(&noWatchingMutex);
         pthread_mutex_unlock(&watchMutex);
 
         // Dance
         printf("Now dancing on stage: Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
-        usleep(SEC2USEC(5));
+        usleep(SEC2USEC(10));
 
         // Leave stage
         printf("Finished dancing on stage: Aged dancer %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
@@ -268,6 +279,9 @@ void *runAudience(void* idPtr) {
 
         // TODO Observe leave
         sem_wait(&nowWatchingSemaphore);
+        pthread_mutex_lock(&noWatchingMutex);
+        noWatching--;
+        pthread_mutex_unlock(&noWatchingMutex);
         printf("Audience %ld: Returning to vegetation \n", id);
     }
 
