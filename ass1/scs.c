@@ -90,6 +90,10 @@ int main(int argc, char** argv) {
     printf("Number of audience members: %d\n", nAudience);
     printf("Number of rounds: %d\n", nRounds);
 
+    // Sanity checks
+    assert(nAgedDancers >= 2);
+    assert(nDancers >= 4);
+
     // Set global constants
     dancerAged = NO_DANCER;
     dancerProOrAged = NO_DANCER;
@@ -186,7 +190,8 @@ void runDancers() {
             if (toWatch[selectedDancerProOrAged] > 0 &&
                 selectedDancerProOrAged != dancerAged &&
                 selectedDancerProOrAged != previousAged &&
-                selectedDancerProOrAged != previousProOrAged) {
+                selectedDancerProOrAged != previousProOrAged &&
+                (nAgedDancers > 2 || selectedDancerProOrAged >= 2)) {
                 dancerProOrAged = selectedDancerProOrAged;
             } else {
                 selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
@@ -199,7 +204,8 @@ void runDancers() {
             for (i = 0; i < (nDancers - 1); i++) {
                 if (selectedDancerProOrAged != dancerAged &&
                     selectedDancerProOrAged != previousAged &&
-                    selectedDancerProOrAged != previousProOrAged) {
+                    selectedDancerProOrAged != previousProOrAged &&
+                    (nAgedDancers > 2 || selectedDancerProOrAged >= 2)) {
                     dancerProOrAged = selectedDancerProOrAged;
                 } else {
                     selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
