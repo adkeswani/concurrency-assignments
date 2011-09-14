@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include <pthread.h>
 #include <semaphore.h>
@@ -17,7 +18,8 @@
 // Macros
 #define SEC2USEC(n)     (n * 1000000)
 #define USEC2SEC(n)     (n / 1000000.0)
-#define NEXTDANCER(n)   ((n+1) % nDancers)
+#define NEXTDANCERAGED(n)   ((n+1) % nAgedDancers)
+#define NEXTDANCERPROORAGED(n)   ((n+1) % (nAgedDancers + nProDancers))
 
 // Methods
 
@@ -50,17 +52,14 @@ unsigned int nDancers = 0;
 // Mutex for changing variables associated with what audience members wish to watch
 pthread_mutex_t watchMutex = PTHREAD_MUTEX_INITIALIZER;
 
-// Counter of number of audience wanting to see a given dancer
-unsigned int *toWatch;
-
 // Array of semaphores for watching a given dancer
 sem_t *toWatchSemaphores;
 
 // Semaphore for audience members now watching the dancers
 sem_t nowWatchingSemaphore;
 
-// Dancer A currently on stage
-int dancerA;
+// Dancers currently on stage
+int dancerAged, dancerProOrAged;
 
 int main(int argc, char** argv) {
     int i;
@@ -75,24 +74,21 @@ int main(int argc, char** argv) {
     nAgedDancers = atoi(argv[N_AGED_DANCERS_ARG]);
     nAudience = atoi(argv[N_AUDIENCE_ARG]);
     nRounds = atoi(argv[N_ROUNDS_ARG]);
-    printf("Number of dancers: %d\n", nDancers);
     printf("Number of pro dancers: %d\n", nProDancers);
     printf("Number of aged dancers: %d\n", nAgedDancers);
     printf("Number of audience members: %d\n", nAudience);
     printf("Number of rounds: %d\n", nRounds);
 
     // Set global constants
-    nDancers = 5;
-    dancerA = NO_DANCER;
-    toWatch = malloc(nDancers * sizeof(int));
-    for(i = 0; i < nDancers; i++) toWatch[i] = 0;
+    dancerAged = NO_DANCER;
+    dancerProOrAged = NO_DANCER;
 
     // Init Random number generator
     srand(time(NULL));
 
     // Setup Semaphores
     toWatchSemaphores = malloc(nDancers * sizeof(sem_t));
-    for(i = 0; i != nDancers; i++) {
+    for(i = 0; i < (nAgedDancers + nProDancers); i++) {
         printf("Initialising semaphore %d\n", i);
         if(sem_init(&toWatchSemaphores[i], 0, 0)) {
             printf("***** Could not initialise semaphore: %d\n", i);
@@ -105,7 +101,7 @@ int main(int argc, char** argv) {
     pthread_t threads[nAudience];
     int rc;
     long t;
-    for(t=0; t < nAudience; t++) {
+    for(t = 0; t < nAudience; t++) {
         printf("Creating thread %ld\n", t);
         rc = pthread_create(&threads[t], NULL, runAudience, (void *)t);
         if (rc) {
@@ -121,69 +117,125 @@ int main(int argc, char** argv) {
 }
 
 int randomDancer() {
-    return rand() % nDancers;
+    return rand() % (nAgedDancers + nProDancers);
 }
 
 void runDancers() {
     printf("Starting Dancers\n");
+    printf("All dancers <= %d are aged, all dancers > %d are pro\n", nAgedDancers - 1, nAgedDancers - 1);
 
-    int selectedDancerA = NO_DANCER;
-    int previousA = NO_DANCER;
+    int selectedDancerAged = NO_DANCER;
+    int selectedDancerProOrAged = NO_DANCER;
+    int previousAged = NO_DANCER;
+    int previousProOrAged = NO_DANCER;
     int i;
     int toWatchSemValue;
     int numberWatching = 0;
 
     while(1) {
-        selectedDancerA = NO_DANCER;
-        dancerA = NO_DANCER;
+        selectedDancerAged = NO_DANCER;
+        selectedDancerProOrAged = NO_DANCER;
+        
+        printf("Selecting next dancers. Previous aged dancer: %d, Previous pro or aged dancer: %d\n", previousAged, previousProOrAged);
 
-        // TODO Select dancer from those wishing to be seen
-        //printf("Selecting next dancer. PreviousA: %d\n", previousA);
-        selectedDancerA = NEXTDANCER(previousA);
-        i = 0;
-        while (i < nDancers) {
-            if (toWatch[selectedDancerA] > 0 && selectedDancerA != previousA) {
-                dancerA = selectedDancerA;
+        //Find the next aged dancer that people want to watch and is not the same as either of the previous dancers
+        selectedDancerAged = NEXTDANCERAGED(previousAged);
+        for (i = 0; i < nAgedDancers - 1; i++) {
+            sem_getvalue(&toWatchSemaphores[selectedDancerAged], &toWatchSemValue);
+            if (toWatchSemValue > 0 && selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged) {
+                dancerAged = selectedDancerAged;
+            } else {
+                selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
             }
-            selectedDancerA = NEXTDANCER(selectedDancerA);
-            i++;
         }
         
-        // If no waiting, select dancer
-        if (dancerA == NO_DANCER) {
-            selectedDancerA = NEXTDANCER(previousA);
-            while (selectedDancerA == previousA) {
-                selectedDancerA = NEXTDANCER(selectedDancerA);
+        //If we could not find an aged dancer people want to watch, then just select the next aged dancer who isn't one of the previous dancers
+        if (dancerAged == NO_DANCER) {
+            selectedDancerAged = NEXTDANCERAGED(previousAged);
+            for (i = 0; i < nAgedDancers - 1; i++) {
+                if (selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged) {
+                    dancerAged = selectedDancerAged;
+                } else {
+                    selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
+                }
             }
-            dancerA = selectedDancerA;
         }
+
+        //If we still cannot find an aged dancer, the arguments given were broken, it's impossible to proceed
+        assert(dancerAged != NO_DANCER);
+
+        //Find the next pro or aged dancer that people want to watch and is not the same as either of the previous dancers
+        selectedDancerProOrAged = NEXTDANCERPROORAGED(previousProOrAged);
+        for (i = 0; i < (nAgedDancers + nProDancers - 1); i++) {
+            sem_getvalue(&toWatchSemaphores[selectedDancerProOrAged], &toWatchSemValue);
+            if (toWatchSemValue > 0 && selectedDancerProOrAged != dancerAged && selectedDancerProOrAged != previousAged && selectedDancerProOrAged != previousProOrAged) {
+                dancerProOrAged = selectedDancerProOrAged;
+            } else {
+                selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
+            }
+        }
+        
+        //If we could not find a pro or aged dancer people want to watch, then just select the next pro or aged dancer who isn't one of the previous dancers
+        if (dancerProOrAged == NO_DANCER) {
+            selectedDancerProOrAged = NEXTDANCERPROORAGED(previousProOrAged);
+            for (i = 0; i < (nAgedDancers + nProDancers - 1); i++) {
+                if (selectedDancerProOrAged != dancerAged && selectedDancerProOrAged != previousAged && selectedDancerProOrAged != previousProOrAged) {
+                    dancerProOrAged = selectedDancerProOrAged;
+                } else {
+                    selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
+                }
+            }
+        }
+
+        //If we still cannot find an aged dancer, the arguments given were broken, it's impossible to proceed
+        assert(dancerProOrAged != NO_DANCER);
+
+        printf("Selected dancers. Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
 
         // Notify Audience members to watch
         pthread_mutex_lock(&watchMutex);
-        numberWatching = toWatch[dancerA];
-        for (i = 0; i != toWatch[dancerA]; i++) {
-            sem_post(&toWatchSemaphores[dancerA]);
-        }
-        toWatch[dancerA] = 0;
-        // Wait for all to pass their waiting semaphore
-        toWatchSemValue = 1;
-        while (toWatchSemValue != 0) {
-            sem_getvalue(&toWatchSemaphores[dancerA], &toWatchSemValue);
-        }
+
+            /*What? Post is atomic...
+            numberWatching = toWatch[dancerA];
+            for (i = 0; i != toWatch[dancerA]; i++) {
+                sem_post(&toWatchSemaphores[dancerA]);
+            }
+            toWatch[dancerA] = 0;
+            // Wait for all to pass their waiting semaphore
+            toWatchSemValue = 1;
+            while (toWatchSemValue != 0) {
+                sem_getvalue(&toWatchSemaphores[dancerA], &toWatchSemValue);
+            }
+            */
+    
+            sem_getvalue(&toWatchSemaphores[dancerAged], &toWatchSemValue);
+            numberWatching = toWatchSemValue;
+            for (; toWatchSemValue > 0; toWatchSemValue--) {
+                sem_post(&toWatchSemaphores[dancerAged]);
+            }
+
+            sem_getvalue(&toWatchSemaphores[dancerProOrAged], &toWatchSemValue);
+            numberWatching += toWatchSemValue;
+            for (; toWatchSemValue > 0; toWatchSemValue--) {
+                sem_post(&toWatchSemaphores[dancerProOrAged]);
+            }
         pthread_mutex_unlock(&watchMutex);
 
         // Dance
-        printf("Now dancing on stage: %d\n", dancerA);
+        printf("Now dancing on stage: Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
         usleep(SEC2USEC(5));
 
         // Leave stage
-        printf("Finished dancing on stage: %d\n", dancerA);
-        for (i = 0; i != numberWatching; i++) {
+        printf("Finished dancing on stage: Aged dancer %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
+        for (i = 0; i < numberWatching; i++) {
             sem_post(&nowWatchingSemaphore);
         }
+
+        previousAged = dancerAged;
+        previousProOrAged = dancerProOrAged;
+        dancerAged = NO_DANCER;
+        dancerProOrAged = NO_DANCER;
         numberWatching = 0;
-        previousA = dancerA;
-        dancerA = NO_DANCER;
     }
 }
 
@@ -205,7 +257,6 @@ void *runAudience(void* idPtr) {
         dancer = randomDancer();
         pthread_mutex_lock(&watchMutex);
         printf("Audience %ld: Selected to watch dancer: %d\n", id, dancer);
-        toWatch[dancer]++;
         pthread_mutex_unlock(&watchMutex);
 
         // TODO Watch - Wait on semaphore
