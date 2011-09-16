@@ -13,33 +13,24 @@
 #define NEXTDANCERAGED(n)   ((n+1) % N_AGED)
 #define NEXTDANCERPROORAGED(n)   ((n+1) % (N_DANCERS))
 
-
-
 // Semaphore implementation (busy-wait)
 #define sem_init(S)   S = 0
 #define sem_wait(S)   d_step {S > 0; S--}
 #define sem_signal(S) S++
 
-// Semaphores
-short toWatchSems[N_DANCERS]
+// Lock implementation
+#define mutex_init(L)   L = 1
+#define mutex_lock(L)   d_step {L == 1; L = 0}
+#define mutex_unlock(L) L = 1
 
-proctype audience() {
-    byte dancer;
-    byte round = 0;
-    do :: 1 ->
-       /* non-critical section - vegetate */
-       /* select dancer */
-       if
-           :: dancer = 0
-           :: dancer = 1
-           :: dancer = 2
-           :: dancer = 3
-           :: dancer = 4
-       fi;
-       /* wait on semaphore */
-       sem_wait(toWatchSems[dancer]);
-    od
-}
+// Mutexs
+byte watchMutex
+
+int toWatchSems[N_DANCERS]
+int nowWatchingSem
+
+// Number of audience members watching
+byte noWatching
 
 proctype runDancers() {
     short selectedDancerAged = NO_DANCER;
@@ -139,6 +130,30 @@ proctype runDancers() {
         previousProOrAged = dancerProOrAged;
         dancerAged = NO_DANCER;
         dancerProOrAged = NO_DANCER;
+    od;
+}
+
+proctype audience() {
+    byte dancer;
+
+    do
+        :: 
+           /* non-critical section - vegetate */
+           /* select dancer */
+           mutex_lock(watchMutex);
+           if
+               :: dancer = 0
+               :: dancer = 1
+               :: dancer = 2
+               :: dancer = 3
+               :: dancer = 4
+           fi;
+           mutex_unlock(watchMutex);
+           /* wait on semaphore */
+           sem_wait(toWatchSems[dancer]);
+           /* Observe leave */
+           sem_wait(nowWatchingSem);
+           d_step{noWatching--};
     od
 }
 
@@ -153,11 +168,14 @@ init {
                    sem_init(toWatchSems[i]);
                    i++
         od;*/
+        noWatching = 100;
+        mutex_init(watchMutex);
         sem_init(toWatchSems[0]);
         sem_init(toWatchSems[1]);
         sem_init(toWatchSems[2]);
         sem_init(toWatchSems[3]);
         sem_init(toWatchSems[4]);
+        sem_init(nowWatchingSem);
 
         run audience();
         run runDancers();
