@@ -13,14 +13,17 @@
 #define NEXTDANCERAGED(n)   ((n+1) % N_AGED)
 #define NEXTDANCERPROORAGED(n)   ((n+1) % (N_DANCERS))
 
+//Note: atomic has to be used here as statements inside d_steps
+//are not allowed to block and they don't work when you verify
+
 // Semaphore implementation (busy-wait)
 #define sem_init(S)   S = 0
-#define sem_wait(S)   d_step {S > 0; S--}
+#define sem_wait(S)   atomic {S--; S > 0;}
 #define sem_signal(S) S++
 
 // Lock implementation
 #define mutex_init(L)   L = 1
-#define mutex_lock(L)   d_step {L == 1; L = 0}
+#define mutex_lock(L)   atomic {L == 1; L = 0}
 #define mutex_unlock(L) L = 1
 
 // Mutexs
@@ -113,13 +116,13 @@ proctype runDancers() {
         mutex_lock(watchMutex);
         mutex_lock(nowWatchingMutex);
             printf("Singalling %d aged dancers(%d) waiting\n", toWatchSemaphores[dancerAged], dancerAged);
-            nWatching += toWatchSemaphores[dancerAged];
+            nWatching = nWatching + toWatchSemaphores[dancerAged];
             do :: toWatchSemaphores[dancerAged] != 0 ->
                 sem_signal(toWatchSemaphores[dancerAged]);
             od;
     
             printf("Singalling %d pro or aged dancer (%d) waiting\n", toWatchSemaphores[dancerProOrAged], dancerProOrAged);
-            nWatching += toWatch[dancerProOrAged];
+            nWatching = nWatching + toWatchSemaphores[dancerProOrAged];
             do :: toWatchSemaphores[dancerProOrAged] != 0 ->
                 sem_signal(toWatchSemaphores[dancerProOrAged]);
             od;

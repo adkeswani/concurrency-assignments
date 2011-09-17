@@ -164,6 +164,7 @@ void runDancers() {
         for (i = 0; i < nAgedDancers - 1; i++) {
             if (toWatch[selectedDancerAged] > 0 && selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged) {
                 dancerAged = selectedDancerAged;
+                break;
             } else {
                 selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
             }
@@ -175,6 +176,7 @@ void runDancers() {
             for (i = 0; i < nAgedDancers - 1; i++) {
                 if (selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged) {
                     dancerAged = selectedDancerAged;
+                    break;
                 } else {
                     selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
                 }
@@ -193,6 +195,7 @@ void runDancers() {
                 selectedDancerProOrAged != previousProOrAged &&
                 (nAgedDancers > 2 || selectedDancerProOrAged >= 2)) {
                 dancerProOrAged = selectedDancerProOrAged;
+                break;
             } else {
                 selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
             }
@@ -207,6 +210,7 @@ void runDancers() {
                     selectedDancerProOrAged != previousProOrAged &&
                     (nAgedDancers > 2 || selectedDancerProOrAged >= 2)) {
                     dancerProOrAged = selectedDancerProOrAged;
+                    break;
                 } else {
                     selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
                 }
