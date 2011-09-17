@@ -8,8 +8,6 @@
 #define NO_DANCER -1
 
 // Macros
-#define SEC2USEC(n)     (n * 1000000)
-#define USEC2SEC(n)     (n / 1000000.0)
 #define NEXTDANCERAGED(n)   ((n+1) % N_AGED)
 #define NEXTDANCERPROORAGED(n)   ((n+1) % (N_DANCERS))
 
@@ -36,14 +34,15 @@ int nowWatchingSemaphore
 // Number of audience members watching
 byte nWatching
 
+short previousAged = N_DANCERS;
+short previousProOrAged = N_DANCERS + 1;
+short dancerAged = NO_DANCER;
+short dancerProOrAged = NO_DANCER - 1;
+
 proctype runDancers() {
     short selectedDancerAged = NO_DANCER;
     short selectedDancerProOrAged = NO_DANCER;
-    short previousAged = NO_DANCER;
-    short previousProOrAged = NO_DANCER;
     short i = 0;
-    short dancerAged = NO_DANCER;
-    short dancerProOrAged = NO_DANCER;
 
     do :: 1 ->
         selectedDancerAged = NO_DANCER;
@@ -57,6 +56,7 @@ proctype runDancers() {
         i = 0;
         do :: i != N_AGED ->
             if
+                //TODO: Add the equivalent of breaks here!
                 ::(toWatchSemaphores[selectedDancerAged] > 0 && selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged) -> dancerAged = selectedDancerAged;
                 :: else -> selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
             fi;
@@ -144,7 +144,7 @@ proctype audience() {
     byte dancer;
 
     do
-        :: 
+        :: 1 ->
             /* non-critical section - vegetate */
 
             /* select dancer */
@@ -192,3 +192,5 @@ init {
         run runDancers();
     }
 }
+
+ltl l0 {[] ((dancerAged != previousAged) && (dancerAged != previousProOrAged) && (dancerProOrAged != previousAged) && (dancerProOrAged != previousProOrAged) && (dancerAged != dancerProOrAged))}
