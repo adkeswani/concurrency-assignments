@@ -25,12 +25,13 @@
 
 // Mutexs
 byte watchMutex
+byte nowWatchingMutex
 
-int toWatchSems[N_DANCERS]
-int nowWatchingSem
+int toWatchSemaphores[N_DANCERS]
+int nowWatchingSemaphore
 
 // Number of audience members watching
-byte noWatching
+byte nWatching
 
 proctype runDancers() {
     short selectedDancerAged = NO_DANCER;
@@ -53,7 +54,7 @@ proctype runDancers() {
         i = 0;
         do :: i != N_AGED ->
             if
-                ::(toWatchSems[selectedDancerAged] > 0 && selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged) -> dancerAged = selectedDancerAged;
+                ::(toWatchSemaphores[selectedDancerAged] > 0 && selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged) -> dancerAged = selectedDancerAged;
                 :: else -> selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
             fi;
             i++;
@@ -81,7 +82,7 @@ proctype runDancers() {
         i = 0;
         do :: i != (N_DANCERS - 1) ->
             if
-                :: toWatchSems[selectedDancerProOrAged] > 0 && selectedDancerProOrAged != dancerAged && selectedDancerProOrAged != previousAged && selectedDancerProOrAged != previousProOrAged && (N_AGED > 2 || selectedDancerProOrAged >= 2) -> dancerProOrAged = selectedDancerProOrAged;
+                :: toWatchSemaphores[selectedDancerProOrAged] > 0 && selectedDancerProOrAged != dancerAged && selectedDancerProOrAged != previousAged && selectedDancerProOrAged != previousProOrAged && (N_AGED > 2 || selectedDancerProOrAged >= 2) -> dancerProOrAged = selectedDancerProOrAged;
                 :: else -> selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
             fi;
             i++;
@@ -106,25 +107,28 @@ proctype runDancers() {
         printf("Selected dancers. Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
     
         // Wait for previous audience members to leave
-        //noWatching == 0;
+        nWatching == 0;
     
         // Notify Audience members to watch
-        d_step {
-            printf("Singalling %d aged dancers(%d) waiting\n", toWatchSems[dancerAged], dancerAged);
-            //noWatching += toWatchSems[dancerAged];
-            do :: toWatchSems[dancerAged] != 0 ->
-                sem_signal(toWatchSems[dancerAged]);
+        mutex_lock(watchMutex);
+        mutex_lock(nowWatchingMutex);
+            printf("Singalling %d aged dancers(%d) waiting\n", toWatchSemaphores[dancerAged], dancerAged);
+            nWatching += toWatchSemaphores[dancerAged];
+            do :: toWatchSemaphores[dancerAged] != 0 ->
+                sem_signal(toWatchSemaphores[dancerAged]);
             od;
     
-            printf("Singalling %d pro or aged dancer (%d) waiting\n", toWatchSems[dancerProOrAged], dancerProOrAged);
-            //noWatching += toWatch[dancerProOrAged];
-            do :: toWatchSems[dancerProOrAged] != 0 ->
-                sem_signal(toWatchSems[dancerProOrAged]);
+            printf("Singalling %d pro or aged dancer (%d) waiting\n", toWatchSemaphores[dancerProOrAged], dancerProOrAged);
+            nWatching += toWatch[dancerProOrAged];
+            do :: toWatchSemaphores[dancerProOrAged] != 0 ->
+                sem_signal(toWatchSemaphores[dancerProOrAged]);
             od;
 
-            //There is no longer a delay when dancer finishes dancing so we do not need the nowWatchingSemaphore
+            //There is no longer a delay when dancer finishes dancing so we do not need the nowWatchingSemaphoreaphore
             printf("Finished dancing on stage: Aged dancer %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
-        }
+        mutex_unlock(watchMutex);
+        mutex_unlock(nowWatchingMutex);
+
     
         previousAged = dancerAged;
         previousProOrAged = dancerProOrAged;
@@ -138,22 +142,28 @@ proctype audience() {
 
     do
         :: 
-           /* non-critical section - vegetate */
-           /* select dancer */
-           mutex_lock(watchMutex);
-           if
-               :: dancer = 0
-               :: dancer = 1
-               :: dancer = 2
-               :: dancer = 3
-               :: dancer = 4
-           fi;
-           mutex_unlock(watchMutex);
-           /* wait on semaphore */
-           sem_wait(toWatchSems[dancer]);
-           /* Observe leave */
-           sem_wait(nowWatchingSem);
-           d_step{noWatching--};
+            /* non-critical section - vegetate */
+
+            /* select dancer */
+            mutex_lock(watchMutex);
+                if
+                    :: dancer = 0
+                    :: dancer = 1
+                    :: dancer = 2
+                    :: dancer = 3
+                    :: dancer = 4
+                fi;
+            mutex_unlock(watchMutex);
+
+            /* wait on semaphore */
+            sem_wait(toWatchSemaphores[dancer]);
+
+            /* Observe leave */
+            sem_wait(nowWatchingSemaphore);
+
+            mutex_lock(nowWatchingMutex);
+                nWatching--;
+            mutex_unlock(nowWatchingMutex);
     od
 }
 
@@ -162,20 +172,18 @@ init {
 
     /* Run everything */
     atomic {
-        /*byte i = 0;
-        do
-            :: i != N_DANCERS ->
-                   sem_init(toWatchSems[i]);
-                   i++
-        od;*/
-        noWatching = 100;
+        nWatching = 0;
+
         mutex_init(watchMutex);
-        sem_init(toWatchSems[0]);
-        sem_init(toWatchSems[1]);
-        sem_init(toWatchSems[2]);
-        sem_init(toWatchSems[3]);
-        sem_init(toWatchSems[4]);
-        sem_init(nowWatchingSem);
+        mutex_init(nowWatchingMutex);
+
+        sem_init(toWatchSemaphores[0]);
+        sem_init(toWatchSemaphores[1]);
+        sem_init(toWatchSemaphores[2]);
+        sem_init(toWatchSemaphores[3]);
+        sem_init(toWatchSemaphores[4]);
+
+        sem_init(nowWatchingSemaphore);
 
         run audience();
         run runDancers();
