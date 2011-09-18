@@ -142,7 +142,7 @@ proctype runDancers() {
     
         printf("Selected dancers. Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
     
-        // Wait for previous audience members to leave
+        // Ensure that all previously watching audience members have finished watching
         nWatching == 0;
     
         // Notify Audience members to watch
@@ -167,12 +167,21 @@ proctype runDancers() {
                 :: toWatch[dancerProOrAged] == 0 ->
                     break;
             od;
-
-            //There is no longer a delay when dancer finishes dancing so we do not need the nowWatchingSemaphoreaphore
-            printf("Finished dancing on stage: Aged dancer %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
         mutex_unlock(watchMutex);
         mutex_unlock(nowWatchingMutex);
 
+        printf("Now dancing on stage: Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
+
+        printf("Finished dancing on stage: Aged dancer %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
+
+        //Tell audience members that they have finished watching
+        i = 0;
+        do
+            :: i != nWatching ->
+                sem_signal(nowWatchingSemaphore);
+            :: i == nWatching ->
+                break;
+        od;
     
         previousAged = dancerAged;
         previousProOrAged = dancerProOrAged;
