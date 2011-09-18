@@ -16,7 +16,7 @@
 
 // Semaphore implementation (busy-wait)
 #define sem_init(S)   S = 0
-#define sem_wait(S)   atomic {S--; S > 0;}
+#define sem_wait(S)   atomic {S > 0; S--}
 #define sem_signal(S) S++
 
 // Lock implementation
@@ -29,6 +29,7 @@ byte watchMutex
 byte nowWatchingMutex
 
 int toWatchSemaphores[N_DANCERS]
+short toWatch[N_DANCERS]
 int nowWatchingSemaphore
 
 // Number of audience members watching
@@ -57,7 +58,7 @@ proctype runDancers() {
         do 
             :: i != N_AGED ->
                 if
-                    ::(toWatchSemaphores[selectedDancerAged] < 0 && 
+                    ::(toWatch[selectedDancerAged] > 0 && 
                       selectedDancerAged != previousAged &&     
                       selectedDancerAged != previousProOrAged) -> 
                         dancerAged = selectedDancerAged;
@@ -99,7 +100,7 @@ proctype runDancers() {
         do 
             :: i != (N_DANCERS - 1) ->
                 if
-                    :: toWatchSemaphores[selectedDancerProOrAged] < 0 && 
+                    :: toWatch[selectedDancerProOrAged] > 0 && 
                        selectedDancerProOrAged != dancerAged && 
                        selectedDancerProOrAged != previousAged && 
                        selectedDancerProOrAged != previousProOrAged && 
@@ -147,21 +148,23 @@ proctype runDancers() {
         // Notify Audience members to watch
         mutex_lock(watchMutex);
         mutex_lock(nowWatchingMutex);
-            printf("Singalling %d aged dancers(%d) waiting\n", toWatchSemaphores[dancerAged], dancerAged);
-            nWatching = nWatching + toWatchSemaphores[dancerAged];
+            printf("Singalling %d aged dancers(%d) waiting\n", toWatch[dancerAged], dancerAged);
+            nWatching = nWatching + toWatch[dancerAged];
             do 
-                :: toWatchSemaphores[dancerAged] != 0 ->
+                :: toWatch[dancerAged] != 0 ->
                     sem_signal(toWatchSemaphores[dancerAged]);
-                :: toWatchSemaphores[dancerAged] == 0 ->
+                    toWatch[dancerAged]--;
+                :: toWatch[dancerAged] == 0 ->
                     break;
             od;
     
             printf("Singalling %d pro or aged dancer (%d) waiting\n", toWatchSemaphores[dancerProOrAged], dancerProOrAged);
-            nWatching = nWatching + toWatchSemaphores[dancerProOrAged];
+            nWatching = nWatching + toWatch[dancerProOrAged];
             do 
-                :: toWatchSemaphores[dancerProOrAged] != 0 ->
+                :: toWatch[dancerProOrAged] != 0 ->
                     sem_signal(toWatchSemaphores[dancerProOrAged]);
-                :: toWatchSemaphores[dancerProOrAged] == 0 ->
+                    toWatch[dancerProOrAged]--;
+                :: toWatch[dancerProOrAged] == 0 ->
                     break;
             od;
 
@@ -194,6 +197,7 @@ proctype audience() {
                     :: dancer = 3
                     :: dancer = 4
                 fi;
+                toWatch[dancer]++;
             mutex_unlock(watchMutex);
 
             /* wait on semaphore */
@@ -225,6 +229,16 @@ init {
         sem_init(toWatchSemaphores[4]);
 
         sem_init(nowWatchingSemaphore);
+
+        byte i;
+        i = 0;
+        do
+            :: i != N_DANCERS ->
+                toWatch[i] = 0;
+                i++;
+            :: i == N_DANCERS ->
+                break;
+        od;
 
         run audience();
         run runDancers();
