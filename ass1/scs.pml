@@ -35,9 +35,9 @@ int nowWatchingSemaphore
 byte nWatching
 
 short previousAged = N_DANCERS;
-short previousProOrAged = N_DANCERS + 1;
+short previousProOrAged = N_DANCERS;
 short dancerAged = NO_DANCER;
-short dancerProOrAged = NO_DANCER - 1;
+short dancerProOrAged = NO_DANCER;
 
 proctype runDancers() {
     short selectedDancerAged = NO_DANCER;
@@ -54,13 +54,20 @@ proctype runDancers() {
         selectedDancerAged = NEXTDANCERAGED(previousAged);
 
         i = 0;
-        do :: i != N_AGED ->
-            if
-                //TODO: Add the equivalent of breaks here!
-                ::(toWatchSemaphores[selectedDancerAged] > 0 && selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged) -> dancerAged = selectedDancerAged;
-                :: else -> selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
-            fi;
-            i++;
+        do 
+            :: i != N_AGED ->
+                if
+                    ::(toWatchSemaphores[selectedDancerAged] < 0 && 
+                      selectedDancerAged != previousAged &&     
+                      selectedDancerAged != previousProOrAged) -> 
+                        dancerAged = selectedDancerAged;
+                        break;
+                    :: else -> 
+                        selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
+                fi;
+                i++;
+            :: i == N_AGED ->
+                break;
         od;
 
         
@@ -68,12 +75,18 @@ proctype runDancers() {
         if :: (dancerAged == NO_DANCER) ->
             selectedDancerAged = NEXTDANCERAGED(previousAged);
             i = 0;
-            do :: i != N_AGED ->
-                if 
-                    :: selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged -> dancerAged = selectedDancerAged;
-                    :: else -> selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
-                fi;
-                i++;
+            do 
+                :: i != N_AGED ->
+                    if 
+                        :: selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged -> 
+                            dancerAged = selectedDancerAged;
+                            break;
+                        :: else -> 
+                            selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
+                    fi;
+                    i++;
+                :: i == N_AGED ->
+                    break;
             od;
         fi;
     
@@ -83,24 +96,43 @@ proctype runDancers() {
         //Find the next pro or aged dancer that people want to watch and is not the same as either of the previous dancers
         selectedDancerProOrAged = NEXTDANCERPROORAGED(previousProOrAged);
         i = 0;
-        do :: i != (N_DANCERS - 1) ->
-            if
-                :: toWatchSemaphores[selectedDancerProOrAged] > 0 && selectedDancerProOrAged != dancerAged && selectedDancerProOrAged != previousAged && selectedDancerProOrAged != previousProOrAged && (N_AGED > 2 || selectedDancerProOrAged >= 2) -> dancerProOrAged = selectedDancerProOrAged;
-                :: else -> selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
-            fi;
-            i++;
+        do 
+            :: i != (N_DANCERS - 1) ->
+                if
+                    :: toWatchSemaphores[selectedDancerProOrAged] < 0 && 
+                       selectedDancerProOrAged != dancerAged && 
+                       selectedDancerProOrAged != previousAged && 
+                       selectedDancerProOrAged != previousProOrAged && 
+                       (N_AGED > 2 || selectedDancerProOrAged >= 2) -> 
+                        dancerProOrAged = selectedDancerProOrAged;
+                        break;
+                    :: else -> 
+                        selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
+                fi;
+                i++;
+            :: i == (N_DANCERS - 1) -> 
+                break;
         od;
         
         //If we could not find a pro or aged dancer people want to watch, then just select the next pro or aged dancer who isn't one of the previous dancers
         if ::(dancerProOrAged == NO_DANCER) ->
             selectedDancerProOrAged = NEXTDANCERPROORAGED(previousProOrAged);
             i = 0;
-            do :: i != (N_DANCERS - 1) ->
-                if 
-                    :: selectedDancerProOrAged != dancerAged && selectedDancerProOrAged != previousAged && selectedDancerProOrAged != previousProOrAged && (N_AGED > 2 || selectedDancerProOrAged >= 2) -> dancerProOrAged = selectedDancerProOrAged;
-                    :: else -> selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
-                fi;
-                i++;
+            do 
+                :: i != (N_DANCERS - 1) ->
+                    if 
+                        :: selectedDancerProOrAged != dancerAged && 
+                           selectedDancerProOrAged != previousAged && 
+                           selectedDancerProOrAged != previousProOrAged && 
+                           (N_AGED > 2 || selectedDancerProOrAged >= 2) -> 
+                            dancerProOrAged = selectedDancerProOrAged;
+                            break;
+                        :: else -> 
+                            selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
+                    fi;
+                    i++;
+                :: i == (N_DANCERS - 1) ->
+                    break;
             od;
         fi;
     
@@ -117,14 +149,20 @@ proctype runDancers() {
         mutex_lock(nowWatchingMutex);
             printf("Singalling %d aged dancers(%d) waiting\n", toWatchSemaphores[dancerAged], dancerAged);
             nWatching = nWatching + toWatchSemaphores[dancerAged];
-            do :: toWatchSemaphores[dancerAged] != 0 ->
-                sem_signal(toWatchSemaphores[dancerAged]);
+            do 
+                :: toWatchSemaphores[dancerAged] != 0 ->
+                    sem_signal(toWatchSemaphores[dancerAged]);
+                :: toWatchSemaphores[dancerAged] == 0 ->
+                    break;
             od;
     
             printf("Singalling %d pro or aged dancer (%d) waiting\n", toWatchSemaphores[dancerProOrAged], dancerProOrAged);
             nWatching = nWatching + toWatchSemaphores[dancerProOrAged];
-            do :: toWatchSemaphores[dancerProOrAged] != 0 ->
-                sem_signal(toWatchSemaphores[dancerProOrAged]);
+            do 
+                :: toWatchSemaphores[dancerProOrAged] != 0 ->
+                    sem_signal(toWatchSemaphores[dancerProOrAged]);
+                :: toWatchSemaphores[dancerProOrAged] == 0 ->
+                    break;
             od;
 
             //There is no longer a delay when dancer finishes dancing so we do not need the nowWatchingSemaphoreaphore
