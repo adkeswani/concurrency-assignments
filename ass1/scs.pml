@@ -205,6 +205,10 @@ proctype audience() {
     do
         :: 1 ->
             /* non-critical section - vegetate */
+            do
+                :: true -> skip;
+                :: true -> break;
+            od;
 
             /* select dancer */
             mutex_lock(watchMutex);
