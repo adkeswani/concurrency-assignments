@@ -141,7 +141,14 @@ proctype runDancers() {
         assert(dancerProOrAged != NO_DANCER);
     
         printf("Selected dancers. Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
-    
+
+        //Check that some rules are being followed
+        assert(dancerAged != previousAged && dancerAged != previousProOrAged);
+        assert(dancerProOrAged != previousAged && dancerProOrAged != previousProOrAged);
+        assert(dancerAged != dancerProOrAged);
+        assert(dancerAged < N_AGED);
+        assert(dancerProOrAged < N_DANCERS);
+
         // Ensure that all previously watching audience members have finished watching
         nWatching == 0;
     
@@ -210,10 +217,12 @@ proctype audience() {
             mutex_unlock(watchMutex);
 
             /* wait on semaphore */
-            sem_wait(toWatchSemaphores[dancer]);
+            requestedDancer: sem_wait(toWatchSemaphores[dancer]);
+
+            assert(dancerAged == dancer || dancerProOrAged == dancer);
 
             /* Observe leave */
-            sem_wait(nowWatchingSemaphore);
+            watchingDancer: sem_wait(nowWatchingSemaphore);
 
             mutex_lock(nowWatchingMutex);
                 nWatching--;
@@ -245,13 +254,16 @@ init {
             :: i != N_DANCERS ->
                 toWatch[i] = 0;
                 i++;
-            :: i == N_DANCERS ->
-                break;
+            :: i == N_DANCERS -> break;
         od;
 
+        run audience();
+        run audience();
         run audience();
         run runDancers();
     }
 }
 
-ltl l0 {[] ((dancerAged != previousAged) && (dancerAged != previousProOrAged) && (dancerProOrAged != previousAged) && (dancerProOrAged != previousProOrAged) && (dancerAged != dancerProOrAged))}
+ltl p0 { [] (audience@requestedDancer -> <> audience@watchingDancer) }
+//Something wrong with the mutex?
+//Thinking of introducing a count to check number of steps. <> does not mean bounded.
