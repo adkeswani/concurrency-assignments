@@ -74,21 +74,22 @@ proctype runDancers() {
         
         //If we could not find an aged dancer people want to watch, then just select the next aged dancer who isn't one of the previous dancers
         if :: (dancerAged == NO_DANCER) ->
-            selectedDancerAged = NEXTDANCERAGED(previousAged);
-            i = 0;
-            do 
-                :: i != N_AGED ->
-                    if 
-                        :: selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged -> 
-                            dancerAged = selectedDancerAged;
-                            break;
-                        :: else -> 
-                            selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
-                    fi;
-                    i++;
-                :: i == N_AGED ->
-                    break;
-            od;
+                selectedDancerAged = NEXTDANCERAGED(previousAged);
+                i = 0;
+                do 
+                    :: i != N_AGED ->
+                        if 
+                            :: selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged -> 
+                                dancerAged = selectedDancerAged;
+                                break;
+                            :: else -> 
+                                selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
+                        fi;
+                        i++;
+                    :: i == N_AGED ->
+                        break;
+                od;
+            :: (dancerAged != NO_DANCER) -> skip;
         fi;
     
         //If we still cannot find an aged dancer, the arguments given were broken, it's impossible to proceed
@@ -117,24 +118,25 @@ proctype runDancers() {
         
         //If we could not find a pro or aged dancer people want to watch, then just select the next pro or aged dancer who isn't one of the previous dancers
         if ::(dancerProOrAged == NO_DANCER) ->
-            selectedDancerProOrAged = NEXTDANCERPROORAGED(previousProOrAged);
-            i = 0;
-            do 
-                :: i != (N_DANCERS - 1) ->
-                    if 
-                        :: selectedDancerProOrAged != dancerAged && 
-                           selectedDancerProOrAged != previousAged && 
-                           selectedDancerProOrAged != previousProOrAged && 
-                           (N_AGED > 2 || selectedDancerProOrAged >= 2) -> 
-                            dancerProOrAged = selectedDancerProOrAged;
-                            break;
-                        :: else -> 
-                            selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
-                    fi;
-                    i++;
-                :: i == (N_DANCERS - 1) ->
-                    break;
-            od;
+                selectedDancerProOrAged = NEXTDANCERPROORAGED(previousProOrAged);
+                i = 0;
+                do 
+                    :: i != (N_DANCERS - 1) ->
+                        if 
+                            :: selectedDancerProOrAged != dancerAged && 
+                               selectedDancerProOrAged != previousAged && 
+                               selectedDancerProOrAged != previousProOrAged && 
+                               (N_AGED > 2 || selectedDancerProOrAged >= 2) -> 
+                                dancerProOrAged = selectedDancerProOrAged;
+                                break;
+                            :: else -> 
+                                selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
+                        fi;
+                        i++;
+                    :: i == (N_DANCERS - 1) ->
+                        break;
+                od;
+            :: (dancerProOrAged != NO_DANCER) -> skip;
         fi;
     
         //If we still cannot find an aged dancer, the arguments given were broken, it's impossible to proceed
