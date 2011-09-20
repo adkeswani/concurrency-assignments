@@ -51,7 +51,7 @@ We use two types of threads:
 
 In order to control the actions of audience members through their four stages we use a set of semaphores.
 \begin{itemize}
-    \item \texttt{toWatchSempahores[]} - an array of semaphores, with one for each dancer.
+    \item \texttt{toWatchSemaphores[]} - an array of semaphores, with one for each dancer.
           Audience members wait on these semaphores when they have selected a dancer to watch and are waiting for the dancer to appear on stage
     \item \texttt{nowWatchingSemaphore} - a single semaphore on which audience members wait while the dancer they selected is performing on stage.
 \end{itemize}
@@ -68,9 +68,72 @@ We also use a number of shared variables to pass information between the audienc
 As C + pthreads does not have atomic control structures we also make use of a number of mutexs to control access to the shared variables.
 \begin{itemize}
     \item \texttt{watchMutex} - controls access to the \texttt{toWatch} array.
-          It also controls access to the \texttt{toWatchSempahores} array of semaphores.
     \item \texttt{nowWatchingMutex} - controls access to the \texttt{nWatching} integer.
 \end{itemize}
+
+The actions of each thread are now discussed.
+
+\subsection{Audience Member Threads}
+The actions of each audience thread is described in relation to the audience member states.
+\begin{enumerate}
+    \item In vegetation, no special action is taken
+    \item On wake from vegetation, the audience member enters their selection and waiting stage. They
+    \begin{enumerate}
+        \item Select a random dancer to watch,
+        \item Take the \texttt{watchMutex},
+        \item Increment the dancer's \texttt{toWatch} value,
+        \item Release the mutex, and
+        \item Wait on the dancers \texttt{toWatchSemaphores}
+    \end{enumerate}
+    \item On notification the audience member enters the watching state.
+    \begin{enumerate}
+        \item They increment \texttt{nWatching}, and
+        \item Wait on the \texttt{nowWatchingSemaphore}
+    \end{enumerate}
+    \item On notification, the audience member has observed the dancer leave the stage. They decrement \texttt{nWatching} and return to vegetating.
+\end{enumerate}
+
+The use of semaphores ensures that audience members do not enter the active watching state until their dancer is on stage.
+The semaphores also ensure that the audience member watches the dancer leave the stage before returning to their vegetative state
+
+\subsection{TV Show Thread}
+The TV show thread loops through the following actions:
+\begin{enumerate}
+    \item Select the new dancers,
+    \item Record the number of audience members watch the dancers,
+    \item Notify that number of audience members,
+    \item Simulate the act of the dancers performing on state,
+    \item Notify the audience watching the dancers that their performer has left the stage.
+\end{enumerate}
+
+The selection of the next dancers to perform is done as a linear search through all of the available dancers for one whose respective \texttt{toWatch} value is $>0$.
+The available dancers are all who have not just left the stage.
+If no such suitable dancer can be found (ie an available dancer an audience member wishes to watch), the first available dancer with their \texttt{toWatch = 0} is selected.
+This selection process is perform twice.
+The first time old aged dancers are considered, and the second time all dancers.
+
+Once the dancers all waiting audience members for those dancers are notified.
+The steps for this are:
+\begin{enumerate}
+    \item The thread waits for all audience members who were previously watching to be notified on \texttt{nowWatchingSemaphore}.
+          This ensures the semaphore is 0 before any additional audience members are allowed to enter their watching stage.
+    \item Both \texttt{watchMutex} and \texttt{nowWatchingMutex} are taken.
+          Taking the \texttt{watchMutex} prevents any audience member from adding itself to the number of audience members wishing to watch the selected dancers.
+          This means that the following step will ensure all currently waiting audience members for the given dancers are notified.
+    \item The \texttt{toWatchSemaphores} for each selected dancer are notified by the number of in their respective \texttt{toWatch} arrays.
+    \item The thread waits until all audience threads have received the notification.
+    \item The mutexes are released.
+\end{enumerate}
+
+The taking of the mutexes outside of the notification of the \texttt{toWatchSemaphores} is necessary to give eventual entry.
+This is because the mutexes prevent any additional audience members from adding themselves onto the \texttt{toWatchSemaphores} after the value of the respective \texttt{toWatch} value has been read.
+This combined with the TV thread waiting means all waiting audience members are guaranteed to pass their semaphore and enter the watching state before the dancers appear on stage.
+
+After this notification process the dancers take the stage and perform.
+At the conclusion of this the TV show thread notifies the audience members their dancer has left the stage.
+This is done by notifying the \texttt{nowWatchingSemaphore} for each audience member that is watching.
+
+The promela proof further explains and shows how the necessary properties for the system are met.
 
 \section{Promela Proof}
 
