@@ -41,6 +41,36 @@ This report is divided into two sections:
 \end{enumerate}
 
 \section{Description of Implementation}
+We have modelled the ``Dancing with the Shakes'' system using a set of threads, shared and private variables.
+
+We use two types of threads:
+\begin{itemize}
+    \item One thread (\texttt{runAudience()}) per audience member. We do not distinguish between audience members watching live or at home on their TV.
+    \item One thread (\texttt{runDancers)()}) to simulate the TV show selecting the next dancer and having dancers perform on stage.
+\end{itemize}
+
+In order to control the actions of audience members through their four stages we use a set of semaphores.
+\begin{itemize}
+    \item \texttt{toWatchSempahores[]} - an array of semaphores, with one for each dancer.
+          Audience members wait on these semaphores when they have selected a dancer to watch and are waiting for the dancer to appear on stage
+    \item \texttt{nowWatchingSemaphore} - a single semaphore on which audience members wait while the dancer they selected is performing on stage.
+\end{itemize}
+We have chosen to use semaphores over busy waits (ie. await statements) to control the actions of audience members.
+
+We also use a number of shared variables to pass information between the audience members and TV show.
+\begin{itemize}
+    \item \texttt{toWatch[]} - an array of integers that records the number of audience members wishing to watch each dancer.
+          We would prefer to use the value of the corresponding \texttt{toWatchSemaphores} value, however in pthreads semaphores do not become negative.
+    \item \texttt{nWatching} - an integer to record the number of audience members currently actively watching the dancer on stage.
+          This does not include audience members waiting for a dancer to appear on stage.
+\end{itemize}
+
+As C + pthreads does not have atomic control structures we also make use of a number of mutexs to control access to the shared variables.
+\begin{itemize}
+    \item \texttt{watchMutex} - controls access to the \texttt{toWatch} array.
+          It also controls access to the \texttt{toWatchSempahores} array of semaphores.
+    \item \texttt{nowWatchingMutex} - controls access to the \texttt{nWatching} integer.
+\end{itemize}
 
 \section{Promela Proof}
 
