@@ -249,18 +249,19 @@ void *runDancers(void* idPtr) {
         printf("*** Dancer %d finished\n", id);
 
         // Leave dancing (just let one dancer do the cleanup)
+        if (dancerProOrAged == id) {
+            previousDancerProOrAged = dancerProOrAged;
+            dancerProOrAged = NO_DANCER;
+            tokenAgedOrPro = NEXTDANCER(tokenAgedOrPro, nDancers);
         if (dancerAged == id) {
-            nDancersOnStage = 0;
-            nAgedDancersOnStage = 0;
+            AWAIT( dancerProOrAged == NO_DANCER);
 
             previousDancerAged = dancerAged;
-            previousDancerProOrAged = dancerProOrAged;
             dancerAged = NO_DANCER;
-            dancerProOrAged = NO_DANCER;
-
             tokenAged = NEXTDANCER(tokenAged, nAgedDancers);
-            tokenAgedOrPro = NEXTDANCER(tokenAgedOrPro, nDancers);
 
+            nDancersOnStage = 0;
+            nAgedDancersOnStage = 0;
             currentlyDancing = 0;
         }
     }
