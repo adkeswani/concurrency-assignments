@@ -183,8 +183,9 @@ void *runDancer(void *idPtr) {
     while (1) {
         //Lock to prevent > 2 dancers being selected
         pthread_mutex_lock(&selectDancerMutex);
-            validRequestsExist = false;
             if (dancerAged == NO_DANCER || dancerProOrAged == NO_DANCER) {
+                //Check if there are any valid requests for dancers
+                validRequestsExist = false;
                 int i;
                 for (i = 0; i != nDancers; i++) {
                     validRequestsExist = validRequestsExist || validRequest[id];
@@ -197,17 +198,15 @@ void *runDancer(void *idPtr) {
                             printf("%ld became new aged dancer\n", id);
                             dancerAged = id;
                         } else if (dancerProOrAged == NO_DANCER) {
+                            //Handle special case where there are 2 aged dancers only. Prevents both dancing at same time
                             if (id >= nAgedDancers || (nAgedDancers > 2)) {
                                 printf("%ld became new pro dancer\n", id);
                                 dancerProOrAged = id;
                             } 
                         }
                     }
-                    //Regardless of whether or not the request is fulfilled, the number of valid requests must be decremented
-                    //to allow other dancers to be selected
-                    if (validRequest[id]) {
-                        validRequest[id] = false;
-                    }
+                    //Regardless of whether or not the request is fulfilled, the request is no longer valid
+                    validRequest[id] = false;
                 }
             }
         pthread_mutex_unlock(&selectDancerMutex);
