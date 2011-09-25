@@ -24,7 +24,7 @@
 // Methods
 
 // Randomly select a dancer
-int randomDancer();
+long randomDancer();
 
 // Single Audience member
 void *runAudience(void *id);
@@ -62,12 +62,10 @@ unsigned int nValidRequests;
 // Count of waiting audience members
 unsigned int *toWatch;
 
-// Mutex for changing variables associated with what audience members wish to watch
-pthread_mutex_t watchMutex = PTHREAD_MUTEX_INITIALIZER;
+// Mutexes for changing variables associated with what audience members wish to watch
+pthread_mutex_t *watchMutexes;
 
-// Mutex for changing the nWatching value
-pthread_mutex_t nowWatchingMutex = PTHREAD_MUTEX_INITIALIZER;
-
+// Mutex for selecting the next dancer
 pthread_mutex_t selectDancerMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Array of semaphores for watching a given dancer
@@ -110,13 +108,13 @@ int main(int argc, char** argv) {
 
     // Setup toWatch
     toWatch = malloc(nDancers * sizeof(unsigned int));
-    for(i = 0; i != (nDancers); i++) {
+    for(i = 0; i != nDancers; i++) {
         toWatch[i] = 0;
     }
 
     // Set up semaphores
     toWatchSemaphores = malloc(nDancers * sizeof(sem_t));
-    for(i = 0; i != (nDancers); i++) {
+    for(i = 0; i != nDancers; i++) {
         printf("Initialising semaphore %d\n", i);
         if(sem_init(&toWatchSemaphores[i], 0, 0)) {
             printf("***** Could not initialise semaphore: %d\n", i);
@@ -125,6 +123,12 @@ int main(int argc, char** argv) {
     }
     sem_init(&nowWatchingSemaphore, 0, 0);
     sem_init(&leaveTogetherSemaphore, 0, 0);
+
+    // Set up mutexes
+    watchMutexes = malloc(nDancers * sizeof(pthread_mutex_t));
+    for (i = 0; i != nDancers; i++) {
+        pthread_mutex_init(&watchMutexes[i], NULL);
+    }
 
     //Spawn threads
     //Set up thread attributes so they are all detached
@@ -160,7 +164,7 @@ int main(int argc, char** argv) {
     pthread_exit(NULL);
 }
 
-int randomDancer() {
+long randomDancer() {
     return rand() % (nDancers);
 }
 
@@ -181,13 +185,17 @@ void *runDancer(void *idPtr) {
         pthread_mutex_lock(&selectDancerMutex);
             if (dancerAged == NO_DANCER || dancerProOrAged == NO_DANCER) {
                 //This dancer can be selected if there are currently no requests or if this dancer has been requested
-                if ((nValidRequests == 0 || toWatch[id] > 0) && id != previousAged && id != previousProOrAged) {
-                    if (id < nAgedDancers && dancerAged == NO_DANCER) {
-                        dancerAged = id;
-                    } else if (dancerProOrAged == NO_DANCER) {
-                        if (id >= nAgedDancers || (nAgedDancers >= 2)) {
-                            dancerProOrAged = id;
-                        } 
+                if (nValidRequests == 0 || toWatch[id] > 0) {
+                    if (id != previousAged && id != previousProOrAged) {
+                        if (id < nAgedDancers && dancerAged == NO_DANCER) {
+                            printf("%ld became new aged dancer\n", id);
+                            dancerAged = id;
+                        } else if (dancerProOrAged == NO_DANCER) {
+                            if (id >= nAgedDancers || (nAgedDancers > 2)) {
+                                printf("%ld became new pro dancer\n", id);
+                                dancerProOrAged = id;
+                            } 
+                        }
                     }
                     //Regardless of whether or not the request is fulfilled, the number of valid requests must be decremented
                     //to allow other dancers to be selected
@@ -206,12 +214,15 @@ void *runDancer(void *idPtr) {
 
             // Lock prevents audience members adding themselves while others are being signalled by runDancer()
             printf("Signalling %d audience members waiting for dancer %ld\n", toWatch[id], id);
-            pthread_mutex_lock(&watchMutex);
+            pthread_mutex_lock(&(watchMutexes[id]));
                 nWatching = toWatch[id];
                 for (; toWatch[id] != 0; toWatch[id]--) {
                     sem_post(&toWatchSemaphores[id]);
                 }
-            pthread_mutex_unlock(&watchMutex);
+            pthread_mutex_unlock(&(watchMutexes[id]));
+
+            //Where could the deadlock be happening?
+            //
 
             //Dance
             usleep(SEC2USEC(10));
@@ -269,12 +280,19 @@ void *runAudience(void* idPtr) {
 
         // Select Dancer
         // Lock prevents audience members adding themselves while others are being signalled by runDancer()
-        pthread_mutex_lock(&watchMutex);
-            dancer = randomDancer();
+        dancer = randomDancer();
+        pthread_mutex_lock(&(watchMutexes[dancer]));
             toWatch[dancer]++;
             nValidRequests++;
             printf("Audience %ld: Selected to watch dancer: %ld\n", id, dancer);
-        pthread_mutex_unlock(&watchMutex);
+        pthread_mutex_unlock(&(watchMutexes[dancer]));
+
+        //Seems like a deadlock somewhere
+        //This only requests one lock
+        //And then it unlocks it without requesting another
+        //So where does the deadlock come from
+        //Probably from runDancer
+        //That locks this lock when it's actually selected this dancer.
 
         // Watch
         // Wait on semaphore until dancer starts dancing
