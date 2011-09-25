@@ -76,9 +76,6 @@ int tsCommon;
 // Count of waiting audience members waiting to see specific dancers
 unsigned int *toWatch;
 
-// Total number of audience members waiting to watch any dancer
-unsigned int nToWatch;
-
 // Mutex for changing variables associated with what audience members wish to watch
 pthread_mutex_t toWatchMutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -102,7 +99,6 @@ int main(int argc, char** argv) {
     nAudience = atoi(argv[N_AUDIENCE_ARG]);
     nRounds = atoi(argv[N_ROUNDS_ARG]);
     tsCommon = 0;
-    nToWatch = 0;
     nDancersOnStage = 0;
     nAgedDancersOnStage = 0;
     currentlyDancing = 0;
@@ -299,14 +295,12 @@ void *runAudience(void* idPtr) {
             dancer = randomDancer();
             dancer = 3;
             toWatch[dancer]++;
-            nToWatch++;
             printf("Audience %d: Selected to watch dancer: %d\n", id, dancer);
         pthread_mutex_unlock(&toWatchMutex);
 
         // Wait for dancer to appear on stage (Do this with atomic in promela)
         AWAIT(dancerAged == dancer || dancerProOrAged == dancer);
         pthread_mutex_lock(&toWatchMutex);
-            nToWatch--;
             toWatch[dancer]--;
         pthread_mutex_unlock(&toWatchMutex);
         printf("Audience %d: Watching Dancer %d\n", id, dancer);
