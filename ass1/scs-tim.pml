@@ -1,6 +1,6 @@
 
-#define N_AGED      3
-#define N_PRO       1
+#define N_AGED      2
+#define N_PRO       2
 #define N_DANCERS   4
 
 #define NO_DANCER -1
@@ -12,25 +12,38 @@
 //Note: atomic has to be used here as statements inside d_steps
 //are not allowed to block and they don't work when you verify
 
-// Audience members waiting to dance
-short toWatch[N_DANCERS]
+// Current dancer on stage
+short dancerAged
+short dancerProOrAged
 
-short nDancersOnStage
-short nAgedDancersOnStage
+// Previous dancer on stage
+short previousAged
+short previousProOrAged
 
-short nWaiting
-short nAgedWaiting
-
+// Dancer CS Management
 short dancerCS
 short dancerProDone
 
+// Track who has right to try and dance
 short tokenAged
-short tokenAgedOrPro
+short tokenProOrAged
 
-short dancerAged
-short dancerProOrAged
-short previousAged
-short previousProOrAged
+// Audience members waiting to dance
+short toWatch[N_DANCERS]
+
+// Number of audience members waiting on each type
+short nWaiting
+short nAgedWaiting
+
+// Number processes watching dancers
+short nWatching
+
+// (Auxiliary) Track number of types of dancers on stage
+short nDancersOnStage
+short nAgedDancersOnStage
+
+// (Auxiliary) Number of dancers in CS section
+short nInDancerCS
 
 proctype dancerThread(byte idx) {
     short isAged;
@@ -57,24 +70,27 @@ proctype dancerThread(byte idx) {
             { dancerCS  == 0 &&
              (
               (dancerAged == NO_DANCER && dancerProOrAged == NO_DANCER && tokenAged == id) ||
-              (dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER && tokenAgedOrPro == id)
+              (dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER && tokenProOrAged == id)
              )
             };
             //printf("Trying to dance: %d\n", id);
             assert(dancerCS == 0);
-            dancerCS = 1;
+            assert(nInDancerCS == 0);
+            d_step{ dancerCS = 1; nInDancerCS++ };
+            assert(nInDancerCS == 1);
             assert(dancerCS == 1);
 
             // Check number of audience members waiting on dancers
             if
-            :: isAged == 1 && nAgedDancersOnStage == 0 -> waiting = nAgedWaiting;
-            :: else                                    -> waiting = nWaiting;
+            :: isAged == 1 && dancerAged == NO_DANCER -> waiting = nAgedWaiting;
+            :: else                                   -> waiting = nWaiting;
             fi;
 
             if
             :: previousAged != id &&
                previousProOrAged != id &&
-               (toWatch[id] > 0 || waiting == 0)
+               ( toWatch[id] > 0 || waiting == 0 ) &&
+               ( N_AGED > 2 || isAged == 0 || dancerAged == NO_DANCER)
                ->
                 // We are eligible to dance
                 canDance = 1;
@@ -83,13 +99,15 @@ proctype dancerThread(byte idx) {
                 if
                 :: dancerAged == NO_DANCER -> tokenAged = NEXTDANCERAGED(tokenAged);
                 :: else ->
-                    tokenAgedOrPro = NEXTDANCERPROORAGED(tokenAgedOrPro);
+                    tokenProOrAged = NEXTDANCERPROORAGED(tokenProOrAged);
                     do 
-                    :: tokenAgedOrPro != dancerAged -> break;
-                    :: tokenAgedOrPro == dancerAged -> tokenAgedOrPro = NEXTDANCERPROORAGED(tokenAgedOrPro);
+                    :: tokenProOrAged != dancerAged -> break;
+                    :: tokenProOrAged == dancerAged -> tokenProOrAged = NEXTDANCERPROORAGED(tokenProOrAged);
                     od;
                 fi;
-                dancerCS = 0;
+
+                assert(nInDancerCS == 1);
+                d_step{ nInDancerCS--; dancerCS = 0 };
             fi;
 
         od;
@@ -101,18 +119,23 @@ proctype dancerThread(byte idx) {
         :: dancerAged == NO_DANCER ->
             dancerAged = id;
             if
-            :: tokenAgedOrPro == id -> tokenAgedOrPro = NEXTDANCERPROORAGED(tokenAgedOrPro);
+            :: tokenProOrAged == id -> tokenProOrAged = NEXTDANCERPROORAGED(tokenProOrAged);
             :: else -> skip;
             fi;
         :: else -> dancerProOrAged = id;
         fi;
-        if
-            :: isAged -> nAgedDancersOnStage++;
-            :: else -> skip;
-        fi;
-        nDancersOnStage++;
+        // Wait for all watching dancers to continue
+        ( toWatch[id] == 0 );
+        assert(nDancersOnStage == 0);
+        assert(nAgedDancersOnStage == 0);
         assert(dancerCS == 1);
-        dancerCS = 0;
+        assert(nInDancerCS == 1);
+        d_step{ nInDancerCS--; dancerCS = 0 };
+
+        // Wait for partner
+        ( dancerCS == 0 && dancerAged != NO_DANCER && dancerProOrAged != NO_DANCER );
+        d_step{nDancersOnStage++;
+               nAgedDancersOnStage = nAgedDancersOnStage + (isAged * 1)};
 
         // Dance
         ( nDancersOnStage == 2 && dancerCS == 0 );
@@ -120,8 +143,11 @@ proctype dancerThread(byte idx) {
         assert(dancerCS == 0);
         assert(nDancersOnStage == 2);
         assert(nAgedDancersOnStage >= 1);
+        assert(dancerAged < N_AGED);
+        assert(dancerAged != previousAged);
+        assert(dancerProOrAged != previousProOrAged);
         assert(tokenAged == dancerAged);
-        assert(tokenAgedOrPro == dancerProOrAged);
+        assert(tokenProOrAged == dancerProOrAged);
             //printf("Leaving dancing: %d\n", id);
 
         // Leave Dancing
@@ -133,18 +159,27 @@ proctype dancerThread(byte idx) {
             // Dancer aged fixes up all the variables after pro has left
             ( dancerProDone == 1);
             assert(dancerCS == 0);
-            dancerCS = 1;
-                dancerProDone = 0;
+            d_step{ dancerCS = 1; nInDancerCS++ };
+                // Alter dancers on stage 
                 previousAged = dancerAged;
                 previousProOrAged = dancerProOrAged;
                 dancerAged = NO_DANCER;
                 dancerProOrAged = NO_DANCER;
+
+                // Wait on audience to stop watching
+                ( nWatching == 0 );
+
+                // Clear other variables
+                dancerProDone = 0;
                 nDancersOnStage = 0;
                 nAgedDancersOnStage = 0;
+
+                // Update tokens away from current dancers
                 tokenAged = NEXTDANCERAGED(tokenAged);
-                tokenAgedOrPro = NEXTDANCERPROORAGED(tokenAgedOrPro);
+                tokenProOrAged = NEXTDANCERPROORAGED(tokenProOrAged);
             assert(dancerCS == 1);
-            dancerCS = 0;
+            assert(nInDancerCS == 1);
+            d_step{ nInDancerCS--; dancerCS = 0 };
         fi;
     od;
 }
@@ -180,10 +215,12 @@ proctype audienceThread() {
             (dancerAged == dancer || dancerProOrAged == dancer);
             d_step{toWatch[dancer]--;
                    nWaiting--;
-                   nAgedWaiting = nAgedWaiting - (isAged * 1)};
+                   nAgedWaiting = nAgedWaiting - (isAged * 1);
+                   nWatching++};
 
             /* Observe leave */
             (dancerAged != dancer && dancerProOrAged != dancer);
+            d_step{ nWatching-- };
     od
 }
 
@@ -192,18 +229,21 @@ init {
 
     /* Run everything */
     atomic {
-        nDancersOnStage = 0;
-        nAgedDancersOnStage = 0;
-        dancerCS = 0;
-        dancerProDone = 0;
-        tokenAged = 0;
-        tokenAgedOrPro = 0;
         dancerAged = NO_DANCER;
         dancerProOrAged = NO_DANCER;
         previousAged = NO_DANCER;
         previousProOrAged = NO_DANCER;
+        dancerCS = 0;
+        dancerProDone = 0;
+        tokenAged = 0;
+        tokenProOrAged = 0;
         nWaiting = 0;
         nAgedWaiting = 0;
+
+        // Initialise auxiliary variables
+        nDancersOnStage = 0;
+        nAgedDancersOnStage = 0;
+        nWatching = 0;
 
         byte i;
         i = 0;
@@ -214,6 +254,7 @@ init {
             :: i == N_DANCERS -> break;
         od;
 
+        //run audienceThread();
         run audienceThread();
         run dancerThread(0);
         run dancerThread(1);
@@ -224,5 +265,6 @@ init {
 
 ltl p0 { [](nDancersOnStage >= 0 && nDancersOnStage <= 2) };
 ltl p1 { [](nAgedDancersOnStage >= 0 && nAgedDancersOnStage <= 2) };
-ltl r0 { <>(dancerAged != NO_DANCER ) };
+ltl p2 { [](dancerAged < N_AGED && dancerProOrAged < N_DANCERS) };
+ltl p3 { [](nWaiting < N_DANCERS && nWatching < N_DANCERS) };
 

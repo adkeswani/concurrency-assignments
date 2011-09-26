@@ -12,7 +12,8 @@ OBJS=$(SRCS:.c=.o)
 CC=gcc
 BUILDFLAGS=-g3 -Wall -Werror
 CFLAGS+=$(BUILDFLAGS)
-LDFLAGS+=-lpthread -lrt
+LDFLAGS+=-lpthread 
+#LDFLAGS+=-lpthread -lrt
 
 # Program build
 $(PROGRAM): $(OBJS)

@@ -35,9 +35,6 @@ void *runAudience(void* id);
 // Method for running dancer selection/dancing/leaving
 void *runDancers(void* id);
 
-// Determines if the dancer can continue selection based on those waiting
-int continueToWatch(int aged);
-
 // Shared Variables
 
 //Number of pro dancers
@@ -59,22 +56,23 @@ unsigned int nDancers = 0;
 int dancerAged, dancerProOrAged;
 
 // Dancers currently on stage
-int previousDancerAged, previousDancerProOrAged;
-
-// Number of dancers currently on stage
-int nDancersOnStage, nAgedDancersOnStage;
-
-// Denotes if dacning is taking place
-int currentlyDancing;
+int previousAged, previousProOrAged;
 
 // Records critical section for dancer selections
 int dancerCS;
+int dancerProDone;
 
 // Tokens for linear waiting in dancers
-int tokenAged, tokenAgedOrPro;
+int tokenAged, tokenProOrAged;
 
 // Count of waiting audience members waiting to see specific dancers
 unsigned int *toWatch;
+
+// Auxiliary counting to help track values in toWatch
+int nWaiting, nAgedWaiting;
+
+// Track number of audience members watching
+int nWatching;
 
 // Mutex for changing variables associated with what audience members wish to watch
 pthread_mutex_t toWatchMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -92,16 +90,6 @@ int main(int argc, char** argv) {
     nAgedDancers = atoi(argv[N_AGED_DANCERS_ARG]);
     nAudience = atoi(argv[N_AUDIENCE_ARG]);
     nRounds = atoi(argv[N_ROUNDS_ARG]);
-    nDancersOnStage = 0;
-    nAgedDancersOnStage = 0;
-    currentlyDancing = 0;
-    dancerAged = NO_DANCER;
-    dancerProOrAged = NO_DANCER;
-    previousDancerAged = NO_DANCER;
-    previousDancerProOrAged = NO_DANCER;
-    tokenAged = 0;
-    tokenAgedOrPro = 0;
-    dancerCS = 0;
     nDancers = nProDancers + nAgedDancers;
     printf("Number of pro dancers: %d\n", nProDancers);
     printf("Number of aged dancers: %d\n", nAgedDancers);
@@ -111,6 +99,19 @@ int main(int argc, char** argv) {
     // Sanity checks
     assert(nAgedDancers >= 2);
     assert(nDancers >= 4);
+
+    // Initialise variables
+    dancerAged = NO_DANCER;
+    dancerProOrAged = NO_DANCER;
+    previousAged = NO_DANCER;
+    previousProOrAged = NO_DANCER;
+    dancerCS = 0;
+    dancerProDone = 0;
+    tokenAged = 0;
+    tokenProOrAged = 0;
+    nWaiting = 0;
+    nAgedWaiting = 0;
+    nWatching = 0;
 
     // Init Random number generator
     srand(time(NULL));
@@ -152,25 +153,6 @@ int randomDancer() {
     return rand() % (nDancers);
 }
 
-int continueToWatch(int aged) {
-    int waiting = 0;
-
-    // Set iteration limit based on aged/non-aged dancers
-    int limit = nDancers;
-    if (aged && nAgedDancersOnStage == 0) {
-        limit = nAgedDancers;
-    }
-
-    int i = 0;
-    for (i = 0; i != limit; i++) {
-        if (i != previousDancerAged && i != previousDancerProOrAged) {
-            waiting += toWatch[i];
-        }
-    }
-
-    return waiting == 0;
-}
-
 void *runDancers(void* idPtr) {
     // Out dancer id - used to denote which dancer we are and if we are aged or not
     int id = (long) idPtr;
@@ -181,88 +163,121 @@ void *runDancers(void* idPtr) {
     // Are we permitted to start dancing
     int canDance = 0;
 
+    // Track number of waiting dancers
+    int waiting;
+
     printf("Starting Dancer thread: %d (Aged: %d)\n", id, isAged);
 
     while(1) {
         while (!canDance) {
             // Wait for it to be our turn in selecting (gives linear waiting)
-            AWAIT(!currentlyDancing && !dancerCS &&
+            AWAIT(!dancerCS &&
                   (
-                    (dancerAged == NO_DANCER && tokenAged      == id) ||
-                    (dancerAged != NO_DANCER && tokenAgedOrPro == id)
+                    (dancerAged == NO_DANCER && dancerProOrAged == NO_DANCER && tokenAged      == id) ||
+                    (dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER && tokenProOrAged == id)
                   )
                   //printf("Dancer:%d tokenAged: %d, tokenPro: %d currDan: %d, dancerCS: %d dancerAged: %d\n", 
-                  //       id, tokenAged, tokenAgedOrPro, currentlyDancing, dancerCS, dancerAged);
+                  //       id, tokenAged, tokenProOrAged, currentlyDancing, dancerCS, dancerAged);
                   );
 
             printf("Dancer %d trying to dance\n", id);
+            dancerCS = 1;
 
-            // Not a current dancer
+            // Check number of audience members waiting on dancers
+            if (isAged && dancerAged == NO_DANCER) {
+                waiting = nAgedWaiting;
+            } else {
+                waiting = nWaiting;
+            }
+
             // Not previous dancer
             // Not previous dancer
             // Check against waiting audience
-            if (
-                  dancerAged != id &&
-                  dancerProOrAged != id &&
-                  previousDancerAged != id &&
-                  previousDancerProOrAged != id &&
-                  ( toWatch[id] > 0 || continueToWatch(isAged) )
+            if ( previousAged != id &&
+                 previousProOrAged != id &&
+                 ( toWatch[id] > 0 || waiting == 0 ) &&
+                 ( nAgedDancers > 2 || isAged == 0 || dancerAged == NO_DANCER )
                 ) {
                 canDance = 1;
             } else {
                 if (dancerAged == NO_DANCER) {
                     tokenAged = NEXTDANCER(tokenAged, nAgedDancers);
                 } else {
-                    tokenAgedOrPro = NEXTDANCER(tokenAgedOrPro, nDancers);
-                    while (tokenAgedOrPro == dancerAged) tokenAgedOrPro = NEXTDANCER(tokenAgedOrPro, nDancers);
+                    tokenProOrAged = NEXTDANCER(tokenProOrAged, nDancers);
+                    while (tokenProOrAged == dancerAged) tokenProOrAged = NEXTDANCER(tokenProOrAged, nDancers);
                 }
+
+                dancerCS = 0;
             }
         }
 
         // We are now dancer on stage (Dancer CS)
-        dancerCS = 1;
-            //printf("Dancer: %d CS\n", id);
-            assert(dancerAged == NO_DANCER || dancerProOrAged == NO_DANCER);
-            if (dancerAged == NO_DANCER) {
-                dancerAged = id;
-                if (tokenAgedOrPro == id) tokenAgedOrPro = NEXTDANCER(tokenAgedOrPro, nDancers);
-                printf("Dancer %d now aged dancer\n", id);
-            } else {
-                dancerProOrAged = id;
-                printf("Dancer %d now pro dancer\n", id);
-            }
-            if (isAged) nAgedDancersOnStage++;
-            nDancersOnStage++;
-
-            // Finished setup (Finihsed Dancer CS)
-            canDance = 0;
-            if (nDancersOnStage == 2) currentlyDancing = 1;
+        //printf("Dancer: %d CS\n", id);
+        assert(dancerAged == NO_DANCER || dancerProOrAged == NO_DANCER);
+        canDance = 0;
+        if (dancerAged == NO_DANCER) {
+            dancerAged = id;
+            if (tokenProOrAged == id) tokenProOrAged = NEXTDANCER(tokenProOrAged, nDancers);
+            printf("Dancer %d now aged dancer\n", id);
+        } else {
+            dancerProOrAged = id;
+            printf("Dancer %d now pro dancer\n", id);
+        }
+        // Wait for all dancers to continue
+        AWAIT( toWatch[id] == 0 );
+        assert(nDancersOnStage == 0);
+        assert(nAgedDancersOnStage == 0);
             //printf("Dancer %d: aged: %d pro: %d nAged: %d, nDancers: %d currDancing: %d\n",
             //       id, dancerAged, dancerProOrAged, nAgedDancersOnStage, nDancersOnStage, currentlyDancing);
         dancerCS = 0;
 
+        // Wait for partner
+        AWAIT( !dancerCS && dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER );
+        nDancersOnStage++;
+        if (isAged) nAgedDancersOnStage++;
+
         // Dance!
-        AWAIT(currentlyDancing && !dancerCS);
-        printf("*** Now dancing on stage: Aged dancer: %d(%d), Pro or aged dancer: %d(%d), Num Dancers: %d \n",
-               dancerAged, ISAGEDDANCER(dancerAged), dancerProOrAged, ISAGEDDANCER(dancerProOrAged), nDancersOnStage);
+        AWAIT( nDancersOnStage == 2 && !dancerCS );
+        assert(dancerCS == 0);
+        assert(nDancersOnStage == 2);
+        assert(nAgedDancersOnStage >= 1);
+        assert(dancerAged < N_AGED);
+        assert(dancerAged != previousAged);
+        assert(dancerProOrAged != previousProOrAged);
+        assert(tokenAged == dancerAged);
+        assert(tokenProOrAged == dancerProOrAged);
+        printf("*** Now dancing on stage: Aged dancer: %d(%d), "
+               "Pro or aged dancer: %d(%d), Num Dancers: %d \n",
+               dancerAged, ISAGEDDANCER(dancerAged), dancerProOrAged,
+               ISAGEDDANCER(dancerProOrAged), nDancersOnStage);
         usleep(SEC2USEC(5));
         printf("*** Dancer %d finished\n", id);
 
         // Leave dancing (just let one dancer do the cleanup)
         if (dancerProOrAged == id) {
-            previousDancerProOrAged = dancerProOrAged;
-            dancerProOrAged = NO_DANCER;
-            tokenAgedOrPro = NEXTDANCER(tokenAgedOrPro, nDancers);
+            dancerProDone = 1;
         if (dancerAged == id) {
-            AWAIT( dancerProOrAged == NO_DANCER);
+            // Wait for pro dancer
+            AWAIT( dancerProDone == 1 );
+            dancerCS = 1;
+                
+                // Alter dancers on stage
+                previousAged = dancerAged;
+                previousProOrAged = dancerProOrAged;
+                dancerAged = NO_DANCER;
+                dancerProOrAged = NO_DANCER;
 
-            previousDancerAged = dancerAged;
-            dancerAged = NO_DANCER;
-            tokenAged = NEXTDANCER(tokenAged, nAgedDancers);
+                // Wait on audience to stop watching
+                AWAIT( nWatching == 0 );
 
-            nDancersOnStage = 0;
-            nAgedDancersOnStage = 0;
-            currentlyDancing = 0;
+                // Clear other variables
+                dancerProDone = 0;
+
+                // Update tokens away from current dancers
+                tokenAged = NEXTDANCER(tokenAged, nAgedDancers);
+                tokenProOrAged = NEXTDANCER(tokenProOrAged, nDancers);
+
+            dancerCS = 0;
         }
     }
 
@@ -274,6 +289,7 @@ void *runAudience(void* idPtr) {
     int sleepDuration = 1000;
     int roundsCompleted = 0;
     int dancer = NO_DANCER;
+    int isAged = 0;
 
     for (roundsCompleted = 0; roundsCompleted != nRounds || nRounds == 0; roundsCompleted++) {
         // Vegetate
@@ -283,22 +299,31 @@ void *runAudience(void* idPtr) {
         usleep(sleepDuration);
         //usleep(SEC2USEC(20));
           
-        // Select Dancer (Do this with atomic in promela)
+        // Select Dancer (Do this with d_step in promela)
+        dancer = randomDancer();
+        isAged = ISAGEDDANCER(dancer);
         pthread_mutex_lock(&toWatchMutex);
-            dancer = randomDancer();
             toWatch[dancer]++;
-            printf("### Audience %d: Selected to watch dancer: %d\n", id, dancer);
+            nWaiting++;
+            if (isAged) nAgedWaiting++;
+            printf("### Audience %d: Selected to watch dancer: %d (Aged: %d)\n", id, dancer, isAged);
         pthread_mutex_unlock(&toWatchMutex);
 
-        // Wait for dancer to appear on stage (Do this with atomic in promela)
+        // Wait for dancer to appear on stage (Do this with d_step in promela)
         AWAIT(dancerAged == dancer || dancerProOrAged == dancer);
         pthread_mutex_lock(&toWatchMutex);
             toWatch[dancer]--;
+            nWaiting--;
+            if (isAged) nAgedWaiting--;
+            nWatching++;
         pthread_mutex_unlock(&toWatchMutex);
         printf("Audience %d: Watching Dancer %d\n", id, dancer);
 
-        // Observe leave
+        // Observe leave (Do this with d_step in promela)
         AWAIT(dancerAged != dancer && dancerProOrAged != dancer);
+        pthread_mutex_lock(&toWatchMutex);
+            nWatching--;
+        pthread_mutex_unlock(&toWatchMutex);
         printf("Audience %d: Watched Dancer %d leave stage\n", id, dancer);
     }
 
