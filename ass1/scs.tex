@@ -34,106 +34,190 @@
 
 \maketitle
 
-This report is divided into two sections:
+This report is divided into ?? sections:
 \begin{enumerate}
     \item A description of the implementation and justification for the choices made
     \item An explanation of the proof of the implementation in Promela
 \end{enumerate}
 
 \section{Description of Implementation}
-We have modelled the ``Dancing with the Shakes'' system using a set of threads, shared and private variables.
+The premise of our implementation of the ``Dancing with the Shakes'' system is that audience members are able to select which dancer to watch and attempt to watch these without any interference.
+Dancers are greedily trying to compete to get onto stage.
+That is, if possible they dancer will choose itself to be on stage rather than deferring to other dancer.
+However dancers are only allowed to determine if they can go onto stage one at a time (that is within the dancer critical section).
+We also enforce linear waiting of the dancers so that once a dancer has had a go at trying to get onto stage, they cannot have another go until every other dancer has tried to get onto stage.
+This waiting may be over the course of a number of other dancers appearing on stage.
+Finally, to ensure audience members do not die while watching, the dancers wait upon audience members to perform their necessary actions.
+This is not truly representative of the real life system, however as we are modelling the system on potentially single core systems, it is a necessary evil.
 
+We have modelled the ``Dancing with the Shakes'' system using a set of threads, shared and private variables.
+We also make use of mutexes in the C implementation to enforce atomicity.
+These are replaced with \texttt{d\_step} in the Promela.
+
+\subsection{Threads}
 We use two types of threads:
 \begin{itemize}
-    \item One thread (\texttt{runAudience()}) per audience member. We do not distinguish between audience members watching live or at home on their TV.
-    \item One thread (\texttt{runDancers)()}) to simulate the TV show selecting the next dancer and having dancers perform on stage.
+    \item One thread (\texttt{audienceThread()}) per audience member.
+          We do not distinguish between audience members watching live or at home on their TV.
+    \item One thread (\texttt{dancerThread)()}) per dancer.
+          We use the same code to simulate both aged and pro dancers.
 \end{itemize}
 
-In order to control the actions of audience members through their four stages we use a set of semaphores.
+\subsection{Shared Variables}
+We use three types of shared variables.
 \begin{itemize}
-    \item \texttt{toWatchSemaphores[]} - an array of semaphores, with one for each dancer.
-          Audience members wait on these semaphores when they have selected a dancer to watch and are waiting for the dancer to appear on stage
-    \item \texttt{nowWatchingSemaphore} - a single semaphore on which audience members wait while the dancer they selected is performing on stage.
+    \item Shared constants,
+    \item Shared variables to communicate between the audience members and dancers, and
+    \item Shared variables to communicate between dancers.
 \end{itemize}
-We have chosen to use semaphores over busy waits (ie. await statements) to control the actions of audience members.
 
-We also use a number of shared variables to pass information between the audience members and TV show.
+\subsubsection{Constants}
+We use a set of shared variables that act as constants once the program has been initiated.
+These are variables track:
 \begin{itemize}
-    \item \texttt{toWatch[]} - an array of integers that records the number of audience members wishing to watch each dancer.
-          We would prefer to use the value of the corresponding \texttt{toWatchSemaphores} value, however in pthreads semaphores do not become negative.
-    \item \texttt{nWatching} - an integer to record the number of audience members currently actively watching the dancer on stage.
+    \item The number of dancers (\texttt{nDancers}) both aged (\texttt{nAgedDancers}) and pro(\texttt{nProDancers}),
+    \item The number of audience members (\texttt{nAudience}), and
+    \item The number of rounds for each audience member (\texttt{nRounds}).
+\end{itemize}
+
+Also for reference later, we index audience members in the following way:
+\begin{itemize}
+    \item From $[0, \textrm{nDancers})$,
+    \item Indices $[0, \textrm{nAgedDancers})$ are all the aged dancers, and
+    \item Indices $[\textrm{nAgedDancers}, \textrm{nDancers})$ are all the pro dancers.
+\end{itemize}
+
+\subsubsection{Audience to Dancer Variables}
+The shared variables to communicate between the audience threads and dancer threads are:
+\begin{itemize}
+    \item \texttt{toWatch[]} -
+          an array of integers that indicates the number of audience members wishing to watch each dancer.
+    \item \texttt{nWaiting} - 
+          indicates the number of audience members waiting for any dancer to appear on stage.
+          This value is maintained as: 
+          \begin{equation*}
+              \textrm{nWaiting} = \sum_{i=0}^{\textrm{nDancers}}\textrm{toWatch}[n]
+          \end{equation*}
+    \item \texttt{nAgedWaiting} - 
+          indicates the number of audience members waiting for any \emph{aged} dancer to appear on stage.
+          This value is maintained as:
+          \begin{equation*}
+              \textrm{nAgedWaiting} = \sum_{i=0}^{\textrm{nAgedDancers}}\textrm{toWatch}[n]
+          \end{equation*}
+    \item \texttt{nWatching} -
+          indicates the number of audience members currently watching their chosen dancer on stage.
           This does not include audience members waiting for a dancer to appear on stage.
+    \item \texttt{dancerAged} and \texttt{dancerProOrAged} - 
+          to indicate the current dancers that are on stage.
+          The first variable can only be an aged dancer, while the second can be any dancer.
 \end{itemize}
 
-As C + pthreads does not have atomic control structures we also make use of a number of mutexs to control access to the shared variables.
+\subsubsection{Dancer to Dancer Variables}
 \begin{itemize}
-    \item \texttt{watchMutex} - controls access to the \texttt{toWatch} array.
-    \item \texttt{nowWatchingMutex} - controls access to the \texttt{nWatching} integer.
+    \item \texttt{dancerCS} - 
+          boolean to indicate if any dancer is within the dancer critical section.
+    \item \texttt{tokenAged} and \texttt{tokenProOrAged} - 
+          tracks the current dancer who has the token for attempting to dance on stage.
+          See Section ?? for more details on the linear waiting and token passing in the dancer selection process.
+    \item \texttt{dancerProDone} - 
+          used to allow dancers to leave the stage together.
+    \item \texttt{previousDancerAged} and \texttt{previousDancerProOrAged} - 
+          to indicate the last dancers that were on stage.
 \end{itemize}
 
-The actions of each thread are now discussed.
+\subsubsection{C Mutexes}
+We also use two mutexes to give atomicity in updating some of the shared variables.
+\begin{itemize}
+    \item \texttt{toWatchMutex} - 
+          gives atomicity in the updates of shared variables in the audience threads.
+    \item \texttt{dancerMutex} - 
+          gives atomicity in the updates of shared variables (or simultaneously reading of those variables) in the dancer threads.
+\end{itemize}
 
 \subsection{Audience Member Threads}
+The audience member threads are designed to be simple.
 The actions of each audience thread is described in relation to the audience member states.
 \begin{enumerate}
-    \item In vegetation, no special action is taken
-    \item On wake from vegetation, the audience member enters their selection and waiting stage. They
+    \item In vegetation, no special action is taken.
+          Only in this state may audience members die.
+    \item On wake from vegetation, the audience member enters their selection and waiting stage.
+          The audience member:
     \begin{enumerate}
-        \item Select a random dancer to watch,
-        \item Take the \texttt{watchMutex},
-        \item Increment the dancer's \texttt{toWatch} value,
-        \item Release the mutex, and
-        \item Wait on the dancers \texttt{toWatchSemaphores}
+        \item Selects a random dancer to watch,
+        \item Then atomically:
+        \begin{enumerate}
+            \item Increments the dancer's \texttt{toWatch} value,
+            \item Updates the waiting variables correspondingly.
+        \end{enumerate}
     \end{enumerate}
-    \item On notification the audience member enters the watching state.
+    \item The audience member then waits for their chosen dancer to appear on stage.
+          Once this happens they enter their watching stage.
+          They also:
+          \begin{enumerate}
+              \item Decrement the waiting values accordingly, and
+              \item Increment the watching value.
+          \end{enumerate}
+    \item The audience member continues to watch until the dancer is no longer on stage.
+          Once the dancer leaves, the audience member returns to vegetation.
+          They also decrement the watching value.
+\end{enumerate}
+
+\subsection{Dancer Threads}
+The dancer threads are more complex as the process of selecting a dancer is involved.
+The dancer threads also control the flow of audience member threads to ensure audience members do not die once they have left their vegetation state.
+Dancers iterate through the following stages:
+\begin{enumerate}
+    \item Compete to decide whether or not the dancer can go on stage, using a queue.
+    \item Enter the Dancer Crticial Section to perform:
     \begin{enumerate}
-        \item They increment \texttt{nWatching}, and
-        \item Wait on the \texttt{nowWatchingSemaphore}
+        \item Determine if the dancer can go on stage.
+        \item Prepare for dancing.
     \end{enumerate}
-    \item On notification, the audience member has observed the dancer leave the stage. They decrement \texttt{nWatching} and return to vegetating.
+    \item Dance.
+    \item Leave Dancing.
 \end{enumerate}
 
-The use of semaphores ensures that audience members do not enter the active watching state until their dancer is on stage.
-The semaphores also ensure that the audience member watches the dancer leave the stage before returning to their vegetative state
+The competition for dancers to decide whether or not they can dance on stage is managed by two queues.
+These queues are maintained using a token passing system.
+The tokens are passed linearly amongst the dancers, so this forms a simple queue where dancers never actually leave the queue.
+Each queue is responsible for determining one of the two dancers to appear on stage.
 
-\subsection{TV Show Thread}
-The TV show thread loops through the following actions:
+The first queue is only for aged dancers.
+It is maintained by the \texttt{tokenAged} token.
+Dancers in this queue try to become the aged dancer \texttt{dancerAged}.
+Similarly, the second queue is for all dancers.
+It is maintained by the \texttt{tokenProOrAged} token.
+Dancers in this queue try to become the aged dancer \texttt{dancerProOrAged}.
+Finally, there is also a precedence between the queues.
+The aged dancer queue is processed first until an aged dancer is selected.
+After this selection the pro dancer is selected.
+
+Once a single dancer has been allowed into the critical section, they must determine if they are allowed to go on stage.
+The conditions for a dancer being allowed to go on stage are:
+\begin{itemize}
+    \item The dancer was not the one of the dancers most recently on stage.
+    \item There are audience members waiting to watch the dancer, or
+    \item If there is no audience member wishing to watch them, no audience member must be waiting to watch any other dancer.
+          (For the aged dancer selection this is reduced to no audience member wishing to watch any aged dancer).
+    \item (The edge case). If there are only two aged dancers, and the aged dancer has been selected, the next dancer must be a pro dancer.
+\end{itemize}
+
+If the dancer can go on stage, then it
 \begin{enumerate}
-    \item Select the new dancers,
-    \item Record the number of audience members watch the dancers,
-    \item Notify that number of audience members,
-    \item Simulate the act of the dancers performing on state,
-    \item Notify the audience watching the dancers that their performer has left the stage.
+    \item Sets itself as the appropriate dancer,
+    \item Waits for their partner, and 
+    \item Waits for audience members to get to watching them.
 \end{enumerate}
 
-The selection of the next dancers to perform is done as a linear search through all of the available dancers for one whose respective \texttt{toWatch} value is $>0$.
-The available dancers are all who have not just left the stage.
-If no such suitable dancer can be found (ie an available dancer an audience member wishes to watch), the first available dancer with their \texttt{toWatch = 0} is selected.
-This selection process is perform twice.
-The first time old aged dancers are considered, and the second time all dancers.
+Finally, after dancing, various variables need to be reset.
+To avoid duplication, the aged dancer always resets these variables.
+However, it only does so once the pro dancer has left stage.
+This is ensured by the aged dancer waiting on the \texttt{dancerProDone} flag.
 
-Once the dancers all waiting audience members for those dancers are notified.
-The steps for this are:
-\begin{enumerate}
-    \item The thread waits for all audience members who were previously watching to be notified on \texttt{nowWatchingSemaphore}.
-          This ensures the semaphore is 0 before any additional audience members are allowed to enter their watching stage.
-    \item Both \texttt{watchMutex} and \texttt{nowWatchingMutex} are taken.
-          Taking the \texttt{watchMutex} prevents any audience member from adding itself to the number of audience members wishing to watch the selected dancers.
-          This means that the following step will ensure all currently waiting audience members for the given dancers are notified.
-    \item The \texttt{toWatchSemaphores} for each selected dancer are notified by the number of in their respective \texttt{toWatch} arrays.
-    \item The thread waits until all audience threads have received the notification.
-    \item The mutexes are released.
-\end{enumerate}
+\section{Sketch Proof}
+We present a sketch proof of the desired properties in our modelling of the ``Dancing with the Shakes System''
 
-The taking of the mutexes outside of the notification of the \texttt{toWatchSemaphores} is necessary to give eventual entry.
-This is because the mutexes prevent any additional audience members from adding themselves onto the \texttt{toWatchSemaphores} after the value of the respective \texttt{toWatch} value has been read.
-This combined with the TV thread waiting means all waiting audience members are guaranteed to pass their semaphore and enter the watching state before the dancers appear on stage.
-
-After this notification process the dancers take the stage and perform.
-At the conclusion of this the TV show thread notifies the audience members their dancer has left the stage.
-This is done by notifying the \texttt{nowWatchingSemaphore} for each audience member that is watching.
-
-The promela proof further explains and shows how the necessary properties for the system are met.
+\section{Performance}
 
 \section{Promela Proof}
 
