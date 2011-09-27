@@ -2,6 +2,7 @@
 #define N_AGED      2
 #define N_PRO       2
 #define N_DANCERS   4
+#define N_AUDIENCE  2
 
 #define NO_DANCER -1
 
@@ -254,7 +255,7 @@ init {
             :: i == N_DANCERS -> break;
         od;
 
-        //run audienceThread();
+        run audienceThread();
         run audienceThread();
         run dancerThread(0);
         run dancerThread(1);
@@ -266,5 +267,6 @@ init {
 ltl p0 { [](nDancersOnStage >= 0 && nDancersOnStage <= 2) };
 ltl p1 { [](nAgedDancersOnStage >= 0 && nAgedDancersOnStage <= 2) };
 ltl p2 { [](dancerAged < N_AGED && dancerProOrAged < N_DANCERS) };
-ltl p3 { [](nWaiting < N_DANCERS && nWatching < N_DANCERS) };
+ltl p3 { [](nWaiting <= N_AUDIENCE && nWatching <= N_AUDIENCE) };
+ltl p4 { [](nInDancerCS <= 1) };
 

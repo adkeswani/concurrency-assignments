@@ -24,16 +24,25 @@
 #define AWAIT(n)    while(!(n));
 #define AWAIT2(n,ss)    while(!(n)) {ss}
 
+// Await for dancer CS
+#define AWAITDANCER(cond) awaitDone = 0;                            \
+                          while (!awaitDone) {                      \
+                            pthread_mutex_lock(&dancerMutex);       \
+                            awaitDone = (cond);                     \
+                            pthread_mutex_unlock(&dancerMutex);     \
+                          }
+
+
 // Methods
 
 // Randomly select a dancer
 int randomDancer();
 
 // Single Audience member
-void *runAudience(void* id);
+void *audienceThread(void* id);
 
 // Method for running dancer selection/dancing/leaving
-void *runDancers(void* id);
+void *dancerThread(void* id);
 
 // Shared Variables
 
@@ -74,8 +83,14 @@ int nWaiting, nAgedWaiting;
 // Track number of audience members watching
 int nWatching;
 
+// Track number of dancers on stage
+int nDancersOnStage, nAgedDancersOnStage;
+
 // Mutex for changing variables associated with what audience members wish to watch
 pthread_mutex_t toWatchMutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Dancer mutex for awaits
+pthread_mutex_t dancerMutex = PTHREAD_MUTEX_INITIALIZER;
 
 int main(int argc, char** argv) {
     int i;
@@ -112,6 +127,8 @@ int main(int argc, char** argv) {
     nWaiting = 0;
     nAgedWaiting = 0;
     nWatching = 0;
+    nDancersOnStage = 0;
+    nAgedDancersOnStage = 0;
 
     // Init Random number generator
     srand(time(NULL));
@@ -128,7 +145,7 @@ int main(int argc, char** argv) {
     long t;
     for(t = 0; t != nAudience; t++) {
         printf("Creating audience thread %ld\n", t);
-        rc = pthread_create(&audience[t], NULL, runAudience, (void *)t);
+        rc = pthread_create(&audience[t], NULL, audienceThread, (void *)t);
         if (rc) {
             printf("ERROR; return code from pthread_create() is %d\n", rc);
             exit(-1);
@@ -139,7 +156,7 @@ int main(int argc, char** argv) {
     pthread_t dancers[nDancers];
     for(t = 0; t != nDancers; t++) {
         printf("Creating Dancer thread %ld\n", t);
-        rc = pthread_create(&dancers[t], NULL, runDancers, (void *)t);
+        rc = pthread_create(&dancers[t], NULL, dancerThread, (void *)t);
         if (rc) {
             printf("ERROR; return code from pthread_create() is %d\n", rc);
             exit(-1);
@@ -153,7 +170,7 @@ int randomDancer() {
     return rand() % (nDancers);
 }
 
-void *runDancers(void* idPtr) {
+void *dancerThread(void* idPtr) {
     // Out dancer id - used to denote which dancer we are and if we are aged or not
     int id = (long) idPtr;
 
@@ -166,20 +183,20 @@ void *runDancers(void* idPtr) {
     // Track number of waiting dancers
     int waiting;
 
+    int awaitDone;
+
     printf("Starting Dancer thread: %d (Aged: %d)\n", id, isAged);
 
     while(1) {
         while (!canDance) {
-            // Wait for it to be our turn in selecting (gives linear waiting)
-            AWAIT(!dancerCS &&
+            AWAITDANCER
+                (!dancerCS &&
                   (
                     (dancerAged == NO_DANCER && dancerProOrAged == NO_DANCER && tokenAged      == id) ||
                     (dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER && tokenProOrAged == id)
                   )
-                  //printf("Dancer:%d tokenAged: %d, tokenPro: %d currDan: %d, dancerCS: %d dancerAged: %d\n", 
-                  //       id, tokenAged, tokenProOrAged, currentlyDancing, dancerCS, dancerAged);
-                  );
-
+                );
+            pthread_mutex_lock(&dancerMutex);
             printf("Dancer %d trying to dance\n", id);
             dancerCS = 1;
 
@@ -191,8 +208,8 @@ void *runDancers(void* idPtr) {
             }
 
             // Not previous dancer
-            // Not previous dancer
             // Check against waiting audience
+            // Edge case for 2 aged dancers
             if ( previousAged != id &&
                  previousProOrAged != id &&
                  ( toWatch[id] > 0 || waiting == 0 ) &&
@@ -207,7 +224,10 @@ void *runDancers(void* idPtr) {
                     while (tokenProOrAged == dancerAged) tokenProOrAged = NEXTDANCER(tokenProOrAged, nDancers);
                 }
 
+                printf("Cannot Dance: %d. New token: Aged: %d Pro: %d\n",
+                       id, tokenAged, tokenProOrAged);
                 dancerCS = 0;
+                pthread_mutex_unlock(&dancerMutex);
             }
         }
 
@@ -230,34 +250,38 @@ void *runDancers(void* idPtr) {
             //printf("Dancer %d: aged: %d pro: %d nAged: %d, nDancers: %d currDancing: %d\n",
             //       id, dancerAged, dancerProOrAged, nAgedDancersOnStage, nDancersOnStage, currentlyDancing);
         dancerCS = 0;
+        pthread_mutex_unlock(&dancerMutex);
 
         // Wait for partner
-        AWAIT( !dancerCS && dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER );
+        AWAITDANCER( !dancerCS && dancerAged != NO_DANCER && dancerProOrAged != NO_DANCER );
         nDancersOnStage++;
         if (isAged) nAgedDancersOnStage++;
 
         // Dance!
-        AWAIT( nDancersOnStage == 2 && !dancerCS );
+        AWAITDANCER( nDancersOnStage == 2 && !dancerCS );
+        printf("*** Now dancing on stage: Aged dancer: %d(%d), "
+               "Pro or aged dancer: %d(%d), Num Dancers: %d, "
+               "TokenAged: %d TokenPro: %d\n",
+               dancerAged, ISAGEDDANCER(dancerAged), dancerProOrAged,
+               ISAGEDDANCER(dancerProOrAged), nDancersOnStage,
+               tokenAged, tokenProOrAged);
         assert(dancerCS == 0);
         assert(nDancersOnStage == 2);
         assert(nAgedDancersOnStage >= 1);
-        assert(dancerAged < N_AGED);
+        assert(dancerAged < nAgedDancers);
         assert(dancerAged != previousAged);
         assert(dancerProOrAged != previousProOrAged);
         assert(tokenAged == dancerAged);
         assert(tokenProOrAged == dancerProOrAged);
-        printf("*** Now dancing on stage: Aged dancer: %d(%d), "
-               "Pro or aged dancer: %d(%d), Num Dancers: %d \n",
-               dancerAged, ISAGEDDANCER(dancerAged), dancerProOrAged,
-               ISAGEDDANCER(dancerProOrAged), nDancersOnStage);
         usleep(SEC2USEC(5));
         printf("*** Dancer %d finished\n", id);
 
         // Leave dancing (just let one dancer do the cleanup)
         if (dancerProOrAged == id) {
             dancerProDone = 1;
-        if (dancerAged == id) {
+        } else if (dancerAged == id) {
             // Wait for pro dancer
+            pthread_mutex_lock(&dancerMutex);
             AWAIT( dancerProDone == 1 );
             dancerCS = 1;
                 
@@ -272,19 +296,23 @@ void *runDancers(void* idPtr) {
 
                 // Clear other variables
                 dancerProDone = 0;
+                nDancersOnStage = 0;
+                nAgedDancersOnStage = 0;
 
                 // Update tokens away from current dancers
                 tokenAged = NEXTDANCER(tokenAged, nAgedDancers);
                 tokenProOrAged = NEXTDANCER(tokenProOrAged, nDancers);
+                printf("Aged %d finished\n", id);
 
             dancerCS = 0;
+            pthread_mutex_unlock(&dancerMutex);
         }
     }
 
     return NULL;
 }
 
-void *runAudience(void* idPtr) {
+void *audienceThread(void* idPtr) {
     int id = (long) idPtr;
     int sleepDuration = 1000;
     int roundsCompleted = 0;

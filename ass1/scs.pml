@@ -1,8 +1,9 @@
 
-#define N_AGED      2
+//#include "non-critical.h"
+
+#define N_AGED      3
 #define N_PRO       2
-#define N_DANCERS   4
-#define N_AUDIENCE  2
+#define N_DANCERS   5
 
 #define NO_DANCER -1
 
@@ -13,215 +14,225 @@
 //Note: atomic has to be used here as statements inside d_steps
 //are not allowed to block and they don't work when you verify
 
-// Current dancer on stage
-short dancerAged
-short dancerProOrAged
+// Semaphore implementation (busy-wait)
+#define sem_init(S)   S = 0
+#define sem_wait(S)   atomic {S > 0; S--}
+#define sem_signal(S) S++
 
-// Previous dancer on stage
-short previousAged
-short previousProOrAged
+// Lock implementation
+#define mutex_init(L)   L = 1
+#define mutex_lock(L)   atomic {L == 1; L = 0}
+#define mutex_unlock(L) L = 1
 
-// Dancer CS Management
-short dancerCS
-short dancerProDone
+// Mutexs
+byte watchMutex
+byte nowWatchingMutex
 
-// Track who has right to try and dance
-short tokenAged
-short tokenProOrAged
-
-// Audience members waiting to dance
+int toWatchSemaphores[N_DANCERS]
 short toWatch[N_DANCERS]
+int nowWatchingSemaphore
 
-// Number of audience members waiting on each type
-short nWaiting
-short nAgedWaiting
+// Number of audience members watching
+byte nWatching
 
-// Number processes watching dancers
-short nWatching
+short previousAged = N_DANCERS;
+short previousProOrAged = N_DANCERS;
+short dancerAged = NO_DANCER;
+short dancerProOrAged = NO_DANCER;
 
-// (Auxiliary) Track number of types of dancers on stage
-short nDancersOnStage
-short nAgedDancersOnStage
+proctype runDancers() {
+    short selectedDancerAged = NO_DANCER;
+    short selectedDancerProOrAged = NO_DANCER;
+    short i = 0;
 
-// (Auxiliary) Number of dancers in CS section
-short nInDancerCS
+    do :: 1 ->
+        selectedDancerAged = NO_DANCER;
+        selectedDancerProOrAged = NO_DANCER;
+        
+        printf("Selecting next dancers. Previous aged dancer: %d, Previous pro or aged dancer: %d\n", previousAged, previousProOrAged);
 
-proctype dancerThread(byte idx) {
-    short isAged;
-    short canDance;
-    short waiting;
-    short limit;
-    short i;
-    short id;
+        //Find the next aged dancer that people want to watch and is not the same as either of the previous dancers
+        selectedDancerAged = NEXTDANCERAGED(previousAged);
 
-    id = idx;
-    canDance = 0;
-
-    if
-    :: id < N_AGED -> isAged = 1;
-    :: else        -> isAged = 0;
-    fi;
-
-    do
-    :: 1 ->
-        do
-        :: canDance == 1   -> break;
-        :: canDance == 0  -> 
-            // Await our turn in selecting - linear waiting
-            { dancerCS  == 0 &&
-             (
-              (dancerAged == NO_DANCER && dancerProOrAged == NO_DANCER && tokenAged == id) ||
-              (dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER && tokenProOrAged == id)
-             )
-            };
-            //printf("Trying to dance: %d\n", id);
-            assert(dancerCS == 0);
-            assert(nInDancerCS == 0);
-            d_step{ dancerCS = 1; nInDancerCS++ };
-            assert(nInDancerCS == 1);
-            assert(dancerCS == 1);
-
-            // Check number of audience members waiting on dancers
-            if
-            :: isAged == 1 && dancerAged == NO_DANCER -> waiting = nAgedWaiting;
-            :: else                                   -> waiting = nWaiting;
-            fi;
-
-            if
-            :: previousAged != id &&
-               previousProOrAged != id &&
-               ( toWatch[id] > 0 || waiting == 0 ) &&
-               ( N_AGED > 2 || isAged == 0 || dancerAged == NO_DANCER)
-               ->
-                // We are eligible to dance
-                canDance = 1;
-            :: else ->
-                // Get the next potential dancer
+        i = 0;
+        do 
+            :: i != N_AGED ->
                 if
-                :: dancerAged == NO_DANCER -> tokenAged = NEXTDANCERAGED(tokenAged);
-                :: else ->
-                    tokenProOrAged = NEXTDANCERPROORAGED(tokenProOrAged);
-                    do 
-                    :: tokenProOrAged != dancerAged -> break;
-                    :: tokenProOrAged == dancerAged -> tokenProOrAged = NEXTDANCERPROORAGED(tokenProOrAged);
-                    od;
+                    ::(toWatch[selectedDancerAged] > 0 && 
+                      selectedDancerAged != previousAged &&     
+                      selectedDancerAged != previousProOrAged) -> 
+                        dancerAged = selectedDancerAged;
+                        break;
+                    :: else -> 
+                        selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
                 fi;
-
-                assert(nInDancerCS == 1);
-                d_step{ nInDancerCS--; dancerCS = 0 };
-            fi;
-
+                i++;
+            :: i == N_AGED ->
+                break;
         od;
 
-        // Dancer CS (cont.)
-        assert(dancerAged == NO_DANCER || dancerProOrAged == NO_DANCER);
-        canDance = 0;
-        if
-        :: dancerAged == NO_DANCER ->
-            dancerAged = id;
-            if
-            :: tokenProOrAged == id -> tokenProOrAged = NEXTDANCERPROORAGED(tokenProOrAged);
-            :: else -> skip;
-            fi;
-        :: else -> dancerProOrAged = id;
+        
+        //If we could not find an aged dancer people want to watch, then just select the next aged dancer who isn't one of the previous dancers
+        if :: (dancerAged == NO_DANCER) ->
+                selectedDancerAged = NEXTDANCERAGED(previousAged);
+                i = 0;
+                do 
+                    :: i != N_AGED ->
+                        if 
+                            :: selectedDancerAged != previousAged && selectedDancerAged != previousProOrAged -> 
+                                dancerAged = selectedDancerAged;
+                                break;
+                            :: else -> 
+                                selectedDancerAged = NEXTDANCERAGED(selectedDancerAged);
+                        fi;
+                        i++;
+                    :: i == N_AGED ->
+                        break;
+                od;
+            :: (dancerAged != NO_DANCER) -> skip;
         fi;
-        // Wait for all watching dancers to continue
-        ( toWatch[id] == 0 );
-        assert(nDancersOnStage == 0);
-        assert(nAgedDancersOnStage == 0);
-        assert(dancerCS == 1);
-        assert(nInDancerCS == 1);
-        d_step{ nInDancerCS--; dancerCS = 0 };
+    
+        //If we still cannot find an aged dancer, the arguments given were broken, it's impossible to proceed
+        assert(dancerAged != NO_DANCER);
+    
+        //Find the next pro or aged dancer that people want to watch and is not the same as either of the previous dancers
+        selectedDancerProOrAged = NEXTDANCERPROORAGED(previousProOrAged);
+        i = 0;
+        do 
+            :: i != (N_DANCERS - 1) ->
+                if
+                    :: toWatch[selectedDancerProOrAged] > 0 && 
+                       selectedDancerProOrAged != dancerAged && 
+                       selectedDancerProOrAged != previousAged && 
+                       selectedDancerProOrAged != previousProOrAged && 
+                       (N_AGED > 2 || selectedDancerProOrAged >= 2) -> 
+                        dancerProOrAged = selectedDancerProOrAged;
+                        break;
+                    :: else -> 
+                        selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
+                fi;
+                i++;
+            :: i == (N_DANCERS - 1) -> 
+                break;
+        od;
+        
+        //If we could not find a pro or aged dancer people want to watch, then just select the next pro or aged dancer who isn't one of the previous dancers
+        if ::(dancerProOrAged == NO_DANCER) ->
+                selectedDancerProOrAged = NEXTDANCERPROORAGED(previousProOrAged);
+                i = 0;
+                do 
+                    :: i != (N_DANCERS - 1) ->
+                        if 
+                            :: selectedDancerProOrAged != dancerAged && 
+                               selectedDancerProOrAged != previousAged && 
+                               selectedDancerProOrAged != previousProOrAged && 
+                               (N_AGED > 2 || selectedDancerProOrAged >= 2) -> 
+                                dancerProOrAged = selectedDancerProOrAged;
+                                break;
+                            :: else -> 
+                                selectedDancerProOrAged = NEXTDANCERPROORAGED(selectedDancerProOrAged);
+                        fi;
+                        i++;
+                    :: i == (N_DANCERS - 1) ->
+                        break;
+                od;
+            :: (dancerProOrAged != NO_DANCER) -> skip;
+        fi;
+    
+        //If we still cannot find an aged dancer, the arguments given were broken, it's impossible to proceed
+        assert(dancerProOrAged != NO_DANCER);
+    
+        printf("Selected dancers. Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
 
-        // Wait for partner
-        ( dancerCS == 0 && dancerAged != NO_DANCER && dancerProOrAged != NO_DANCER );
-        d_step{nDancersOnStage++;
-               nAgedDancersOnStage = nAgedDancersOnStage + (isAged * 1)};
-
-        // Dance
-        ( nDancersOnStage == 2 && dancerCS == 0 );
-            //printf("Now dacing: %d\n", id);
-        assert(dancerCS == 0);
-        assert(nDancersOnStage == 2);
-        assert(nAgedDancersOnStage >= 1);
+        //Check that some rules are being followed
+        assert(dancerAged != previousAged && dancerAged != previousProOrAged);
+        assert(dancerProOrAged != previousAged && dancerProOrAged != previousProOrAged);
+        assert(dancerAged != dancerProOrAged);
         assert(dancerAged < N_AGED);
-        assert(dancerAged != previousAged);
-        assert(dancerProOrAged != previousProOrAged);
-        assert(tokenAged == dancerAged);
-        assert(tokenProOrAged == dancerProOrAged);
-            //printf("Leaving dancing: %d\n", id);
+        assert(dancerProOrAged < N_DANCERS);
 
-        // Leave Dancing
-        if 
-        :: dancerProOrAged == id ->
-            // Dancer pro just leaves (waiting for dancer aged to go its work)
-            dancerProDone = 1;
-        :: dancerAged == id ->
-            // Dancer aged fixes up all the variables after pro has left
-            ( dancerProDone == 1);
-            assert(dancerCS == 0);
-            d_step{ dancerCS = 1; nInDancerCS++ };
-                // Alter dancers on stage 
-                previousAged = dancerAged;
-                previousProOrAged = dancerProOrAged;
-                dancerAged = NO_DANCER;
-                dancerProOrAged = NO_DANCER;
+        // Ensure that all previously watching audience members have finished watching
+        nWatching == 0;
+    
+        // Notify Audience members to watch
+        mutex_lock(watchMutex);
+        mutex_lock(nowWatchingMutex);
+            printf("Singalling %d aged dancers(%d) waiting\n", toWatch[dancerAged], dancerAged);
+            nWatching = nWatching + toWatch[dancerAged];
+            do 
+                :: toWatch[dancerAged] != 0 ->
+                    sem_signal(toWatchSemaphores[dancerAged]);
+                    toWatch[dancerAged]--;
+                :: toWatch[dancerAged] == 0 ->
+                    break;
+            od;
+    
+            printf("Singalling %d pro or aged dancer (%d) waiting\n", toWatchSemaphores[dancerProOrAged], dancerProOrAged);
+            nWatching = nWatching + toWatch[dancerProOrAged];
+            do 
+                :: toWatch[dancerProOrAged] != 0 ->
+                    sem_signal(toWatchSemaphores[dancerProOrAged]);
+                    toWatch[dancerProOrAged]--;
+                :: toWatch[dancerProOrAged] == 0 ->
+                    break;
+            od;
+        mutex_unlock(watchMutex);
+        mutex_unlock(nowWatchingMutex);
 
-                // Wait on audience to stop watching
-                ( nWatching == 0 );
+        printf("Now dancing on stage: Aged dancer: %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
 
-                // Clear other variables
-                dancerProDone = 0;
-                nDancersOnStage = 0;
-                nAgedDancersOnStage = 0;
+        printf("Finished dancing on stage: Aged dancer %d, Pro or aged dancer: %d\n", dancerAged, dancerProOrAged);
 
-                // Update tokens away from current dancers
-                tokenAged = NEXTDANCERAGED(tokenAged);
-                tokenProOrAged = NEXTDANCERPROORAGED(tokenProOrAged);
-            assert(dancerCS == 1);
-            assert(nInDancerCS == 1);
-            d_step{ nInDancerCS--; dancerCS = 0 };
-        fi;
+        //Tell audience members that they have finished watching
+        i = 0;
+        do
+            :: i != nWatching ->
+                sem_signal(nowWatchingSemaphore);
+            :: i == nWatching ->
+                break;
+        od;
+    
+        previousAged = dancerAged;
+        previousProOrAged = dancerProOrAged;
+        dancerAged = NO_DANCER;
+        dancerProOrAged = NO_DANCER;
     od;
 }
 
-proctype audienceThread() {
+proctype audience() {
     byte dancer;
-    byte isAged;
 
     do
         :: 1 ->
             /* non-critical section - vegetate */
             do
-            :: true -> skip;
-            :: true -> break;
+                :: true -> skip;
+                :: true -> break;
             od;
 
             /* select dancer */
-            if
-            :: dancer = 0
-            :: dancer = 1
-            :: dancer = 2
-            :: dancer = 3
-            fi;
-            if
-            :: dancer < N_AGED -> isAged = 1;
-            :: else            -> isAged = 0;
-            fi;
-            d_step{toWatch[dancer]++;
-                   nWaiting++;
-                   nAgedWaiting = nAgedWaiting + (isAged * 1)};
+            mutex_lock(watchMutex);
+                if
+                    :: dancer = 0
+                    :: dancer = 1
+                    :: dancer = 2
+                    :: dancer = 3
+                    :: dancer = 4
+                fi;
+                toWatch[dancer]++;
+            mutex_unlock(watchMutex);
 
-            /* wait for dancer to appear on stage */
-            (dancerAged == dancer || dancerProOrAged == dancer);
-            d_step{toWatch[dancer]--;
-                   nWaiting--;
-                   nAgedWaiting = nAgedWaiting - (isAged * 1);
-                   nWatching++};
+            /* wait on semaphore */
+            requestedDancer: sem_wait(toWatchSemaphores[dancer]);
+
+            assert(dancerAged == dancer || dancerProOrAged == dancer);
 
             /* Observe leave */
-            (dancerAged != dancer && dancerProOrAged != dancer);
-            d_step{ nWatching-- };
+            watchingDancer: sem_wait(nowWatchingSemaphore);
+
+            mutex_lock(nowWatchingMutex);
+                nWatching--;
+            mutex_unlock(nowWatchingMutex);
     od
 }
 
@@ -230,21 +241,18 @@ init {
 
     /* Run everything */
     atomic {
-        dancerAged = NO_DANCER;
-        dancerProOrAged = NO_DANCER;
-        previousAged = NO_DANCER;
-        previousProOrAged = NO_DANCER;
-        dancerCS = 0;
-        dancerProDone = 0;
-        tokenAged = 0;
-        tokenProOrAged = 0;
-        nWaiting = 0;
-        nAgedWaiting = 0;
-
-        // Initialise auxiliary variables
-        nDancersOnStage = 0;
-        nAgedDancersOnStage = 0;
         nWatching = 0;
+
+        mutex_init(watchMutex);
+        mutex_init(nowWatchingMutex);
+
+        sem_init(toWatchSemaphores[0]);
+        sem_init(toWatchSemaphores[1]);
+        sem_init(toWatchSemaphores[2]);
+        sem_init(toWatchSemaphores[3]);
+        sem_init(toWatchSemaphores[4]);
+
+        sem_init(nowWatchingSemaphore);
 
         byte i;
         i = 0;
@@ -255,17 +263,13 @@ init {
             :: i == N_DANCERS -> break;
         od;
 
-        run audienceThread();
-        run audienceThread();
-        run dancerThread(0);
-        run dancerThread(1);
-        run dancerThread(2);
-        run dancerThread(3);
+        run audience();
+        run audience();
+        run audience();
+        run runDancers();
     }
 }
 
-ltl p0 { [](nDancersOnStage >= 0 && nDancersOnStage <= 2) };
-ltl p1 { [](nAgedDancersOnStage >= 0 && nAgedDancersOnStage <= 2) };
-ltl p2 { [](dancerAged < N_AGED && dancerProOrAged < N_DANCERS) };
-ltl p3 { [](nWaiting <= N_AUDIENCE && nWatching <= N_AUDIENCE) };
-
+ltl p0 { [] (audience@requestedDancer -> <> audience@watchingDancer) }
+//Something wrong with the mutex?
+//Thinking of introducing a count to check number of steps. <> does not mean bounded.

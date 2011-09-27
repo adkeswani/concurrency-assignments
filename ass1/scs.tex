@@ -163,6 +163,7 @@ The actions of each audience thread is described in relation to the audience mem
 \end{enumerate}
 
 \subsection{Dancer Threads}
+\label{sub:dancer-threads}
 The dancer threads are more complex as the process of selecting a dancer is involved.
 The dancer threads also control the flow of audience member threads to ensure audience members do not die once they have left their vegetation state.
 Dancers iterate through the following stages:
@@ -215,7 +216,108 @@ However, it only does so once the pro dancer has left stage.
 This is ensured by the aged dancer waiting on the \texttt{dancerProDone} flag.
 
 \section{Sketch Proof}
-We present a sketch proof of the desired properties in our modelling of the ``Dancing with the Shakes System''
+We present a sketch proof of the desired properties in our modelling of the ``Dancing with the Shakes System''.
+These properties are also tested in Promela to ensure they hold.
+
+The properties that we desire are:
+\begin{itemize}
+    \item There are always two dancers on stage (unless dancers on stage are being selected).
+    \item No dancer can dance on stage twice in a row.
+    \item Mutual exclusion for the dancer critical section.
+    \item Linear waiting of the dancers is enforced.
+    \item Lack of unnecessary delay for audience members.
+\end{itemize}
+
+\subsection{Always two Dancers on stage}
+Two give this property we assume that there must be at least two dancers, one eligible to be the aged dancer, and one eligible to be the pro dancer.
+Then, by the linear waiting of dancers, every dancer must be considered, thus the eligible dancers will eventually be reached.
+Finally, the dancers wait for each other before going on stage.
+
+Therefore, unless the next dancers to appear on stage are being selected, there are always two dancers on stage.
+
+\subsection{No dancing twice in a row}
+The previous dancers on stage are stored in two variables \texttt{previousAged} and \texttt{previousProOrAged}.
+These only change when dancers leave the stage.
+Also, a dancer is not allowed to enter the stage if they are one of these variables.
+
+Therefore, a dancer cannot be selected to dance on stage two times in a row.
+
+\subsection{Mutual Exclusion}
+There are two critical sections in the dancer.
+The first is in the pre-protocol for determining which dancer should appear on stage.
+The second is in the post-protocol for when dancers leave stage.
+Entering these critical sections are controlled by await statements and the \texttt{dancerCS} flag.
+
+First consider the pre-dancing protocol critical section.
+To enter this section, dancers must pass the await condition, given below.
+\begin{lstlisting}
+(!dancerCS &&
+  (
+    (dancerAged == NO_DANCER && dancerProOrAged == NO_DANCER &&
+     tokenAged      == id)
+    ||
+    (dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER &&
+     tokenProOrAged == id)
+  )
+);
+\end{lstlisting}
+The first property of this await is that the \texttt{dancerCS} flag is not set.
+Thus if set, no dancer can pass into the CS.
+Thus mutual exclusion can only be broken if no dancers are in the CS, and two are able to pass the await.
+
+The second element to the await is control of which queue (aged or pro) should be used to allow a dancer in the CS.
+The determination of the queue is made on whether the aged dancer has been selected yet.
+Thus the two parts of the element are independent, so only one can take effect at any point in time.
+Finally each are guarded by the respective queue token.
+As this can match only one dancer, when $\texttt{dancerCS} = 0$ the await condition is true for only one dancer.
+
+Finally, we ensure that \texttt{dancerAged} and \texttt{dancerProOrAged} are only changed within blocks where $\texttt{dancerCS} = 1$.
+This means even if the active queue changes, the await condition is still false.
+
+We must also consider the post-dancing protocol critical section.
+Firstly, only the aged dancer may enter this section.
+Also, as both dancers are selected, no other dancer at the pre-dancing await can enter their CS.
+Thus is is always safe to enter this critical section.
+Further by setting \texttt{dancerCS}, this ensures the pre and post CS are mutually exclusive.
+
+Therefore, we have mutual exclusion of the dancer critical sections.
+
+\subsection{Linear Waiting}
+We use linear waiting to ensure a lack of unnecessary delay for audience members.
+In particular we are interested in the linear waiting of dancers who have audience members that wish to view them on stage.
+
+To give linear waiting we need to have a:
+\begin{itemize}
+    \item A FIFO queue, and
+    \item Dancers (that we are interested in) cannot overtake each other
+\end{itemize}
+
+We get a FIFO queue from placing all of the dancers permanently into the queue.
+We then maintain the current head of the queue with token.
+This token is changed by always incrementing it (and wrapping around when the token exceeds the maximum value).
+This ensures a FIFO queue.
+
+Given the token passing method, dancers cannot overtake each other.
+However dancers can rescind their desire to dance and not take to the stage.
+What we are actually interested is a sub-queue of the dancers which are those who have audience members waiting to see them.
+We say we have linear waiting if those dancers cannot always rescind their desire to dance.
+
+We consider the cases a dancer may rescinds its desire to dance, as given in section \ref{sub:dancer-threads}:
+\begin{itemize}
+    \item If they danced previously, the are moved to the back of the queue. This is OK as the dancer is not eligible to dance.
+    \item If they are an aged dancer, and there are only two aged dancers, they are in the pro queue.
+          Thus rescinding is OK, as the dancer will be considered in the aged queue.
+    \item Otherwise the dancer will dance, as their \texttt{toWatch} value will be positive.
+\end{itemize}
+
+Therefore we get linear waiting.
+
+\subsection{Lack of unnecessary delay}
+To give lack of unnecessary delay we make the following assumptions
+\begin{itemize}
+    \item Only one audience members is waiting on a dancer to appear on stage.
+    \item 
+\end{itemize}
 
 \section{Performance}
 
