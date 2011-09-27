@@ -1,6 +1,7 @@
-#define N_AGED      3
-#define N_PRO       1
-#define N_DANCERS   4
+#define N_AGED      2
+#define N_PRO       3
+#define N_DANCERS   5
+#define N_AUDIENCE  2
 
 #define NO_DANCER -1
 
@@ -25,12 +26,19 @@
 short dancerAged
 short dancerProOrAged
 
+// Records if dancers are actually dancing
+byte agedDancing
+byte proDancing
+
 // Dancers previously on stage
 short previousAged
 short previousProOrAged
 
 // Dacer pro done
 byte dancerProDone;
+
+// Number of audience watching
+byte nAudienceWatching;
 
 // Number of audience members requesting
 int validRequest[N_DANCERS]
@@ -53,12 +61,12 @@ int leaveTogetherSemaphore
 
 proctype runDancer(byte idx) {
     byte id;
-    byte nWatching;
+    byte nWatchingMe;
     bool validRequestsExist;
     byte i;
 
     id = idx;
-    nWatching = 0;
+    nWatchingMe = 0;
     validRequestsExist = 0;
     i = 0;
 
@@ -120,32 +128,43 @@ proctype runDancer(byte idx) {
         if
         :: dancerAged == id || dancerProOrAged == id ->
             ( dancerAged != NO_DANCER && dancerProOrAged != NO_DANCER );
-            assert(dancerAged != NO_DANCER);
-            assert(dancerProOrAged != NO_DANCER);
 
             /* Signal audience members to run, lock gives eventual entry */
             mutex_lock(watchMutexes[id]);
-                nWatching = toWatch[id];
+                nWatchingMe = toWatch[id];
                 do
                 :: toWatch[id] == 0 -> break;
                 :: toWatch[id] != 0 ->
                     sem_signal(toWatchSemaphores[id]);
+                    d_step{nAudienceWatching++};
                     toWatch[id]--;
                 od;
             mutex_unlock(watchMutexes[id]);
 
-            /* Dance */
+            if
+            :: dancerAged      == id -> agedDancing = 1;
+            :: dancerProOrAged == id -> proDancing  = 1;
+            fi;
+
+            /* Dance - ensure both dancers are dancing simultaneously */
             skip;
+            ( agedDancing == 1 && proDancing == 1 );
             assert(dancerAged != NO_DANCER);
             assert(dancerProOrAged != NO_DANCER);
+            assert(agedDancing == 1);
+            assert(proDancing == 1);
 
             /* Leave stage */
             do
-            :: nWatching == 0 -> break;
-            :: nWatching != 0 ->
+            :: nWatchingMe == 0 -> break;
+            :: nWatchingMe != 0 ->
                 sem_signal(nowWatchingSemaphore);
-                nWatching--;
+                nWatchingMe--;
             od;
+
+            /* Wait for audience to leave */
+            ( nAudienceWatching == 0 );
+            assert(nAudienceWatching == 0);
 
             /* Aged dancer handles cleanup from leaving the stage */
             if
@@ -174,6 +193,8 @@ proctype runDancer(byte idx) {
                     previousAged      = dancerAged;
                     dancerAged        = NO_DANCER;
                     dancerProOrAged   = NO_DANCER;
+                    agedDancing       = 0;
+                    proDancing        = 0;
 
                     sem_signal(leaveTogetherSemaphore);
                 mutex_unlock(selectDancerMutex);
@@ -206,7 +227,6 @@ proctype audience() {
             :: dancer = 1
             :: dancer = 2
             :: dancer = 3
-            :: dancer = 4
             fi;
             mutex_lock(watchMutexes[dancer]);
                 toWatch[dancer]++;
@@ -221,6 +241,7 @@ proctype audience() {
 
             /* Observe leave */
             watchingDancer: sem_wait(nowWatchingSemaphore);
+            d_step{ nAudienceWatching-- };
     od
 }
 
@@ -233,6 +254,9 @@ init {
         dancerAged = NO_DANCER;
         dancerProOrAged = NO_DANCER;
         dancerProDone = 0;
+        nAudienceWatching = 0;
+        agedDancing = 0;
+        proDancing = 0;
 
         // Init semaphores
         sem_init(nowWatchingSemaphore);
@@ -254,15 +278,16 @@ init {
             :: i == N_DANCERS -> break;
         od;
 
-        //run audience();
-        //run audience();
+        run audience();
+        run audience();
         run runDancer(0);
         run runDancer(1);
         run runDancer(2);
         run runDancer(3);
-        //run runDancer(5);
+        run runDancer(4);
     }
 
 }
 
-//ltl p0 { [] (audience@requestedDancer -> <> audience@watchingDancer) }
+ltl r0 { [] (audience@requestedDancer -> <> audience@watchingDancer) };
+ltl p0 { [] (nAudienceWatching < N_AUDIENCE ) };
