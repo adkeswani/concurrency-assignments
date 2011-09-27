@@ -1,6 +1,3 @@
-
-//#include "non-critical.h"
-
 #define N_AGED      3
 #define N_PRO       2
 #define N_DANCERS   5
@@ -199,6 +196,124 @@ proctype runDancers() {
     od;
 }
 
+proctype runDancer(byte id) {
+    byte id = id;
+    byte nWatching = 0;
+    bool validRequestsExist = false;
+
+    do
+        :: 1 ->
+            //Lock to prevent > 2 dancers being selected
+            mutex_lock(selectDancerMutex);
+                if 
+                    :: dancerAged == NO_DANCER || dancerProOrAged == NO_DANCER ->
+                        //Check if there are any valid requests for dancers
+                        validRequestsExist = false;
+
+                        byte i = 0;
+                        do
+                            :: i != nDancers ->
+                                validRequestsExist = validRequestsExist || validRequest[id];
+                                i++
+                            :: i == nDancers ->
+                                break
+                        od
+
+                        //This dancer can be selected if there are currently no requests or if this dancer has been requested
+                        if 
+                            :: (!validRequestsExist || validRequest[id]) ->
+                                if 
+                                    :: (id != previousAged && id != previousProOrAged) ->
+                                        if 
+                                            :: (id < nAgedDancers && dancerAged == NO_DANCER) ->
+                                                printf("%ld became new aged dancer\n", id);
+                                                dancerAged = id;
+                                            :: (dancerProOrAged == NO_DANCER) ->
+                                                //Handle special case where there are 2 aged dancers only. Prevents both dancing at same time
+                                                if 
+                                                    :: (id >= nAgedDancers || (nAgedDancers > 2)) ->
+                                                        printf("%ld became new pro dancer\n", id);
+                                                        dancerProOrAged = id;
+                                                    :: else ->
+                                                        break
+                                                fi
+                                            :: else ->
+                                                break
+                                        fi
+                                    :: else ->
+                                        break
+                                fi;
+
+                                //Regardless of whether or not the request is fulfilled, the request is no longer valid
+                                validRequest[id] = false;
+                            :: else ->
+                                skip
+                        fi
+                    :: else ->
+                        skip
+                fi
+            mutex_unlock(selectDancerMutex);
+    
+        if (dancerAged == id || dancerProOrAged == id) {
+            //Wait until the other dancer has also been selected
+            while (dancerAged == NO_DANCER || dancerProOrAged == NO_DANCER) { };
+
+            printf("%ld now dancing on stage\n", id);
+
+            // Lock prevents audience members adding themselves while others are being signalled by runDancer()
+            printf("Signalling %d audience members waiting for dancer %ld\n", toWatch[id], id);
+            pthread_mutex_lock(&(watchMutexes[id]));
+                nWatching = toWatch[id];
+                for (; toWatch[id] != 0; toWatch[id]--) {
+                    sem_post(&toWatchSemaphores[id]);
+                }
+            pthread_mutex_unlock(&(watchMutexes[id]));
+
+            //Dance
+            usleep(SEC2USEC(10));
+    
+            // Leave stage
+            printf("%ld finished dancing on stage\n", id);
+            for (; nWatching != 0; nWatching--) {
+                sem_post(&nowWatchingSemaphore);
+            }
+    
+            //Let the aged dancer thread handle the resetting of dancers
+            if (id == dancerAged) {
+                //Lock prevents new dancers being selected while dancers are being reset
+                pthread_mutex_lock(&selectDancerMutex);
+                    //Reset nValidRequests as previously invalid requests may now be valid
+                    int i;
+                    for (i = 0; i != nDancers; i++) {
+                        validRequest[i] = false; 
+                    }
+                    for (i = 0; i != nDancers; i++) {
+                        if (toWatch[i] > 0) {validRequest[i] = true;}
+                    }
+    
+                    //Reset dancers
+                    previousProOrAged = dancerProOrAged; 
+                    previousAged = dancerAged;
+                    dancerAged = NO_DANCER;
+                    dancerProOrAged = NO_DANCER;
+
+                    //Allow the pro dancer to leave
+                    sem_post(&leaveTogetherSemaphore);
+                pthread_mutex_unlock(&selectDancerMutex);
+            } else {
+                //Semaphore prevents pro dancer continuing before aged dancer has reset dancers
+                sem_wait(&leaveTogetherSemaphore);
+            }
+            printf("%ld has left stage\n", id);
+        }
+    }
+
+    return NULL;
+}
+
+
+
+
 proctype audience() {
     byte dancer;
 
@@ -263,13 +378,34 @@ init {
             :: i == N_DANCERS -> break;
         od;
 
-        run audience();
-        run audience();
-        run audience();
-        run runDancers();
-    }
-}
+        dancerAged = NO_DANCER;
+        dancerProOrAged = NO_DANCER;
 
-ltl p0 { [] (audience@requestedDancer -> <> audience@watchingDancer) }
-//Something wrong with the mutex?
-//Thinking of introducing a count to check number of steps. <> does not mean bounded.
+        i = 0;
+        do
+            :: i != N_DANCERS ->
+                validRequest[i] = false;
+                i++;
+            :: i == N_DANCERS -> break;
+        od;
+
+        sem_init(nowWatchingSemaphore);
+        sem_init(leaveTogetherSemaphore);
+    
+        // Set up mutexes
+        i = 0;
+        do
+            :: i != N_DANCERS ->
+                mutex_init(watchMutexes[i]);
+                i++;
+            :: i == N_DANCERS -> break;
+        od;
+
+        run audience();
+        run audience();
+        run runDancer();
+        run runDancer();
+        run runDancer();
+    }
+
+}
