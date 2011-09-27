@@ -322,5 +322,91 @@ To give lack of unnecessary delay we make the following assumptions
 \section{Performance}
 
 \section{Promela Proof}
+To recap, the properties that we desire are:
+\begin{enumerate}
+    \item There are always two dancers on stage (unless dancers on stage are being selected).
+    \item At least one dancer is aged.
+    \item No dancer can dance on stage twice in a row.
+    \item Eventual entry for audience members - that is they eventually witness the dancer they wish to see.
+    \item Lack of unnecessary delay for audience members.
+          That is they audience members within a bounded number of steps.
+\end{enumerate}
+
+These properties are given by a series of assertions and LTLs, and we use Promela to verify these.
+
+\subsection{Dancer properties}
+To verify the properties 1 - 3 in relation to dancers, we use a set of assertions at the ``dance'' point in the dancer code:
+\begin{lstlisting}
+assert(agedDancing == 1);
+assert(proDancing == 1);
+assert(dancerAged != NO_DANCER);
+assert(dancerProOrAged != NO_DANCER);
+assert(dancerAged != dancerProOrAged);
+assert(dancerAged < N_AGED);
+assert(dancerAged != previousAged);
+assert(dancerAged != previousProOrAged);
+assert(dancerProOrAged != previousAged);
+assert(dancerProOrAged != previousProOrAged);
+\end{lstlisting}
+
+We also make use of the following LTLs
+\begin{lstlisting}
+ltl p3 { [] (dancerAged < N_AGED && dancerProOrAged < N_DANCERS) };
+\end{lstlisting}
+
+
+The dance point is where both dancers are on stage an dancing.
+The first two assertions use the \texttt{agedDancing} and \texttt{proDancing} flags.
+We also assert that the \texttt{dancerAged} and \texttt{dancerProOrAged} are valid.
+We combine this with the LTL $p3$ to ensure the dancers must be within valid ranges.
+Finally we assert the two dancers are different.
+The combination of these assertions provides that at the point of dancing there are two dancers on stage, as required.
+%TODO nOnStage counter
+
+To assert that one dancer is aged, we use the \texttt{dancerAged} variable.
+As aged dancers are in the range $[0,\textrm{N\_AGED}]$, this value being below \texttt{N\_AGED} gives us at least one aged dancer.
+This property is also asserted by the LTL $p3$.
+Thus one dancer must be aged, as required.
+
+To ensure no dancer may dance twice in a row, we maintain the previous dancers when the current dancers leave the stage.
+As this is the only place the dancers are modified, we know they must be the previous dancers.
+We then assert the current dancers are not the same as the previous dancers.
+This gives us that no dancer is on stage for two consecutive songs, as required.
+
+\subsection{Eventual entry for Audience}
+To give eventual entry we use the LTLs:
+\begin{lstlisting}
+ltl r0 { [] (audience@requestedDancer -> <> audience@watchingDancer) };
+ltl r1 { [] (audienceTracked@requestedDancer -> <> audienceTracked@watchingDancer) };
+\end{lstlisting}
+We also label the two types of audience threads at the point where they request a dancer, and the point they watch the dancer.
+The verification of this LTL means that any given audience member will see their desired dancer on stage, as required.
+
+\subsection{Lack of unnecessary delay for audience}
+The proof of this property in Promela is difficult, and may be incomplete.
+The property requires that:
+\begin{itemize}
+    \item Other audience members are in their vegetation state, or
+    \item watching a non-competing dancer.
+\end{itemize}
+
+To make the poof we introduce a second audience thread \texttt{audienceTracked} which is identical to the normal audience thread except:
+\begin{itemize}
+    \item It does not update the \texttt{audienceWaiting} counter, and
+    \item It stores the dancer it selected in a shared variable.
+\end{itemize}
+
+We then introduce the LTL:
+\begin{lstlisting}
+ltl r3 { [] ((audienceTracked@requestedDancer && [](audienceWaiting == 0)) ->
+         <> audienceTracked@watchingDancer) };
+
+\end{lstlisting}
+
+This LTL ensures that where \texttt{audienceTracked} is the only audience member selecting a dancer,
+    and no other dancer can begin it's selection process, that eventually the tracked audience watches their dancer.
+This is sufficient to show that there is a bound on the length of time required to wait for an audience member to see the dancer on stage.
+If the watching state is not eventually reached, then there is no bound.
+As it is reached, there is a bound as required.
 
 \end{document}
