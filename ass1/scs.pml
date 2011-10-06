@@ -28,14 +28,14 @@ short dancerProOrAged = NO_DANCER;
 
 // Records if dancers are actually dancing
 byte agedDancing = 0;
-byte proDancing = 0;
+byte proOrAgedDancing = 0;
 
 // Dancers previously on stage
 short previousAged = NO_DANCER;
 short previousProOrAged = NO_DANCER;
 
 // Dacer pro done
-byte dancerProDone = 0;
+byte dancerProOrAgedDone = 0;
 
 // Number of audience watching
 byte nAudienceWatching = 0;
@@ -79,7 +79,7 @@ proctype runDancer(byte idx) {
         /* Lock to prevent > 2 dancers being selected */
         mutex_lock(selectDancerMutex);
             if 
-            :: dancerProDone == 0 &&
+            :: dancerProOrAgedDone == 0 &&
                (dancerAged == NO_DANCER || dancerProOrAged == NO_DANCER) ->
                 /* Check if there are any valid requests for dancers */
                 validRequestsExist = 0;
@@ -148,14 +148,14 @@ proctype runDancer(byte idx) {
 
             if
             :: dancerAged      == id -> agedDancing = 1;
-            :: dancerProOrAged == id -> proDancing  = 1;
+            :: dancerProOrAged == id -> proOrAgedDancing  = 1;
             fi;
 
             /* Dance - ensure both dancers are dancing simultaneously */
             skip;
-            ( agedDancing == 1 && proDancing == 1 );
+            ( agedDancing == 1 && proOrAgedDancing == 1 );
             assert(agedDancing == 1);
-            assert(proDancing == 1);
+            assert(proOrAgedDancing == 1);
             assert(dancerAged != NO_DANCER);
             assert(dancerProOrAged != NO_DANCER);
             assert(dancerAged != previousAged);
@@ -181,7 +181,7 @@ proctype runDancer(byte idx) {
             if
             :: id == dancerAged ->
                 mutex_lock(selectDancerMutex);
-                    ( dancerProDone == 1 );
+                    ( dancerProOrAgedDone == 1 );
                     i = 0;
                     do
                     :: i == N_DANCERS -> break;
@@ -205,14 +205,14 @@ proctype runDancer(byte idx) {
                     dancerAged        = NO_DANCER;
                     dancerProOrAged   = NO_DANCER;
                     agedDancing       = 0;
-                    proDancing        = 0;
+                    proOrAgedDancing  = 0;
 
                     sem_signal(leaveTogetherSemaphore);
                 mutex_unlock(selectDancerMutex);
             :: else -> 
-                dancerProDone = 1;
+                dancerProOrAgedDone = 1;
                 sem_wait(leaveTogetherSemaphore);
-                dancerProDone = 0;
+                dancerProOrAgedDone = 0;
             fi;
         :: else -> skip;
         fi;
@@ -301,10 +301,10 @@ init {
         // Init shared variables
         dancerAged = NO_DANCER;
         dancerProOrAged = NO_DANCER;
-        dancerProDone = 0;
+        dancerProOrAgedDone = 0;
         nAudienceWatching = 0;
         agedDancing = 0;
-        proDancing = 0;
+        proOrAgedDancing = 0;
         dancerTracked = NO_DANCER;
         audienceWaiting = 0;
 

@@ -41,26 +41,24 @@ This report is divided into ?? sections:
 \end{enumerate}
 
 \section{Description of Implementation}
-The premise of our implementation of the ``Dancing with the Shakes'' system is that audience members are able to select which dancer to watch and attempt to watch these without any interference.
-Dancers are greedily trying to compete to get onto stage.
-That is, if possible they dancer will choose itself to be on stage rather than deferring to other dancer.
-However dancers are only allowed to determine if they can go onto stage one at a time (that is within the dancer critical section).
-We also enforce linear waiting of the dancers so that once a dancer has had a go at trying to get onto stage, they cannot have another go until every other dancer has tried to get onto stage.
-This waiting may be over the course of a number of other dancers appearing on stage.
-Finally, to ensure audience members do not die while watching, the dancers wait upon audience members to perform their necessary actions.
-This is not truly representative of the real life system, however as we are modelling the system on potentially single core systems, it is a necessary evil.
-
-We have modelled the ``Dancing with the Shakes'' system using a set of threads, shared and private variables.
-We also make use of mutexes in the C implementation to enforce atomicity.
-These are replaced with \texttt{d\_step} in the Promela.
+The behaviour of the dancers and audience members in our implementation of the ``Dancing with the Shakes'' system is as follows:
+\begin{itemize}
+    \item Audience members request a dancer to watch and then wait for it to start dancing.
+    \item Dancers greedily compete to get onto stage, i.e. if possible the dancer will choose itself to be on stage rather than deferring to another dancer.
+    \item Dancers are only allowed to determine if they can go onto stage one at a time. 
+    \item Dancers may only get onto stage if they have been requested or if there are no other requests that can be fulfilled at this time.
+    \item Once a dancer is on stage, the audience members requesting it are notified and wait for the dance to finish
+    \item Once the dancer has finished dancing, the audience members are again notified and can proceed to their vegetate phase.
+    \item The dancer resets everything and then this process repeats.
+\end{itemize}
 
 \subsection{Threads}
 We use two types of threads:
 \begin{itemize}
     \item One thread (\texttt{audienceThread()}) per audience member.
           We do not distinguish between audience members watching live or at home on their TV.
-    \item One thread (\texttt{dancerThread)()}) per dancer.
-          We use the same code to simulate both aged and pro dancers.
+    \item One thread (\texttt{dancerThread()()}) per dancer.
+          We use the same code to simulate both aged and professional dancers.
 \end{itemize}
 
 \subsection{Shared Variables}
@@ -73,253 +71,144 @@ We use three types of shared variables.
 
 \subsubsection{Constants}
 We use a set of shared variables that act as constants once the program has been initiated.
-These are variables track:
+These variables track:
 \begin{itemize}
-    \item The number of dancers (\texttt{nDancers}) both aged (\texttt{nAgedDancers}) and pro(\texttt{nProDancers}),
+    \item The number of dancers (\texttt{nDancers}) both aged (\texttt{nAgedDancers}) and pro (\texttt{nProDancers}),
     \item The number of audience members (\texttt{nAudience}), and
     \item The number of rounds for each audience member (\texttt{nRounds}).
 \end{itemize}
-
-Also for reference later, we index audience members in the following way:
+Also for reference later, we index the \texttt{nDancers} dancers in the following way:
 \begin{itemize}
-    \item From $[0, \textrm{nDancers})$,
-    \item Indices $[0, \textrm{nAgedDancers})$ are all the aged dancers, and
-    \item Indices $[\textrm{nAgedDancers}, \textrm{nDancers})$ are all the pro dancers.
+    \item Indices $[0, \textrm{nAgedDancers})$ are all of the aged dancers, and
+    \item Indices $[\textrm{nAgedDancers}, \textrm{nDancers})$ are all of the pro dancers.
 \end{itemize}
 
 \subsubsection{Audience to Dancer Variables}
 The shared variables to communicate between the audience threads and dancer threads are:
 \begin{itemize}
     \item \texttt{toWatch[]} -
-          an array of integers that indicates the number of audience members wishing to watch each dancer.
-    \item \texttt{nWaiting} - 
-          indicates the number of audience members waiting for any dancer to appear on stage.
-          This value is maintained as: 
-          \begin{equation*}
-              \textrm{nWaiting} = \sum_{i=0}^{\textrm{nDancers}}\textrm{toWatch}[n]
-          \end{equation*}
-    \item \texttt{nAgedWaiting} - 
-          indicates the number of audience members waiting for any \emph{aged} dancer to appear on stage.
-          This value is maintained as:
-          \begin{equation*}
-              \textrm{nAgedWaiting} = \sum_{i=0}^{\textrm{nAgedDancers}}\textrm{toWatch}[n]
-          \end{equation*}
-    \item \texttt{nWatching} -
-          indicates the number of audience members currently watching their chosen dancer on stage.
-          This does not include audience members waiting for a dancer to appear on stage.
-    \item \texttt{dancerAged} and \texttt{dancerProOrAged} - 
-          to indicate the current dancers that are on stage.
-          The first variable can only be an aged dancer, while the second can be any dancer.
+          an array of size \texttt{nDancers} of integers that indicates the number of audience members wishing to watch each dancer.
+    \item \texttt{validRequest[]} -
+          an array of size \texttt{nDancers} of boolean values that indicates whether a request for a dancer is currently considered to be valid (i.e. follows the rules)
+    \item \texttt{watchMutexes[]} -
+          an array of size \texttt{nDancers} of mutexes that prevents audience members selecting a dancer while it is already dancing.
+    \item \texttt{toWatchSemaphores[]} -
+          an array of size \texttt{nDancers} of semaphores that audience members wait on until their dancer begins dancing and signals them.
+    \item \texttt{nowWatchingSemaphore} -
+          a semaphore that audience members wait on after their dancer begins dancing until it finishes dancing.
+    \item \texttt{nAudienceWatching} -
+          an integer that indicates the number of audience members yet to finish watching their dancer.
 \end{itemize}
 
 \subsubsection{Dancer to Dancer Variables}
+The shared variables to communicate between the dancer threads are:
 \begin{itemize}
-    \item \texttt{dancerCS} - 
-          boolean to indicate if any dancer is within the dancer critical section.
-    \item \texttt{tokenAged} and \texttt{tokenProOrAged} - 
-          tracks the current dancer who has the token for attempting to dance on stage.
-          See Section ?? for more details on the linear waiting and token passing in the dancer selection process.
-    \item \texttt{dancerProDone} - 
-          used to allow dancers to leave the stage together.
+    \item \texttt{dancerAged} and \texttt{dancerProOrAged}
+          integers that indicate which dancers are currently on stage.
     \item \texttt{previousDancerAged} and \texttt{previousDancerProOrAged} - 
-          to indicate the last dancers that were on stage.
-\end{itemize}
-
-\subsubsection{C Mutexes}
-We also use two mutexes to give atomicity in updating some of the shared variables.
-\begin{itemize}
-    \item \texttt{toWatchMutex} - 
-          gives atomicity in the updates of shared variables in the audience threads.
-    \item \texttt{dancerMutex} - 
-          gives atomicity in the updates of shared variables (or simultaneously reading of those variables) in the dancer threads.
+          integers that indicate the dancers that were previously on stage.
+    \item \texttt{selectDancerMutex} -
+          a mutex that prevents multiple dancers from simultaneously being set as one of the current dancers
+    \item \texttt{leaveTogetherSemaphore} -
+          a semaphore that forces the pro/aged dancer to wait for the aged dancer to finish resetting variables before proceeding
+    \item \texttt{dancerProOrAgedDone} -
+          an integer flag to ensure that the pro/aged dancer has finished dancing and also used to indicate when both dancers have left the stage
+    \item \texttt{agedDancing} and \texttt{proOrAgedDancing} - 
+          integer flags that are used to ensure that both dancers dance simultaneously
 \end{itemize}
 
 \subsection{Audience Member Threads}
 The audience member threads are designed to be simple.
 The actions of each audience thread is described in relation to the audience member states.
 \begin{enumerate}
-    \item In vegetation, no special action is taken.
-          Only in this state may audience members die.
-    \item On wake from vegetation, the audience member enters their selection and waiting stage.
-          The audience member:
+    \item In vegetation, no special action is taken. Only in this state may audience members die.
+    \item Upon waking from vegetation, the audience member enters its selection and waiting stage. The audience member:
     \begin{enumerate}
         \item Selects a random dancer to watch,
         \item Then atomically:
         \begin{enumerate}
             \item Increments the dancer's \texttt{toWatch} value,
-            \item Updates the waiting variables correspondingly.
+            \item Indicates that there is a request for the dancer using its \texttt{validRequest} value,
         \end{enumerate}
     \end{enumerate}
-    \item The audience member then waits for their chosen dancer to appear on stage.
-          Once this happens they enter their watching stage.
-          They also:
-          \begin{enumerate}
-              \item Decrement the waiting values accordingly, and
-              \item Increment the watching value.
-          \end{enumerate}
-    \item The audience member continues to watch until the dancer is no longer on stage.
+    \item The audience member then waits for its chosen dancer to appear on stage by waiting on a toWatchSemaphore.
+          Once this semaphore is signalled the audience member enters its watching stage.
+    \item The audience member waits for its chosen dancer to finish dancing by waiting on the nowWatchingSemaphore.
           Once the dancer leaves, the audience member returns to vegetation.
-          They also decrement the watching value.
 \end{enumerate}
 
 \subsection{Dancer Threads}
-\label{sub:dancer-threads}
 The dancer threads are more complex as the process of selecting a dancer is involved.
-The dancer threads also control the flow of audience member threads to ensure audience members do not die once they have left their vegetation state.
 Dancers iterate through the following stages:
 \begin{enumerate}
-    \item Compete to decide whether or not the dancer can go on stage, using a queue.
-    \item Enter the Dancer Crticial Section to perform:
+    \item While either of the dancers have not been selected yet:
     \begin{enumerate}
-        \item Determine if the dancer can go on stage.
-        \item Prepare for dancing.
+        \item Check if there are any valid requests for dancers at the moment
+        \item If there are no valid requests or if this dancer has been requested:
+        \begin{enumerate}
+            \item Check if this dancer is allowed to dance by checking the rules
+            \item If so, set this dancer to one of the current dancers based on whether or not it is aged and which dancer has already been selected
+            \item Regardless of whether it was selected, set validRequest to indicate there is no longer a valid request for this dancer
+        \end{enumerate}
+        \item If this dancer has become one of the current dancers:
+        \begin{enumerate}
+            \item Wait until the other dancer has also been selected
+            \item Signal the toWatchSemaphore for this dancer to allow the audience members to begin watching
+            \item Wait until the other dancer has also signalled its audience members
+            \item Signal the nowWatchingSemaphore to tell the audience members the it has finished dancing
+            \item Wait for these audience members to stop watching
+            \item If this is the aged dancer:
+            \begin{enumerate}
+                \item Wait for the pro/aged dancer to finish dancing
+                \item Reset all of the variables and set the previous dancers to the current aged and pro/aged dancers
+                \item Signal the pro/aged dancer that it can leave
+            \end{enumerate}
+            \item If this is the pro/aged dancer:
+            \begin{enumerate}
+                \item Signal the aged dancer to indicate that it has finished dancing
+                \item Wait for the aged dancing to finish resetting variables
+            \end{enumerate}
+            \item Leave
+        \end{enumerate}
     \end{enumerate}
-    \item Dance.
-    \item Leave Dancing.
 \end{enumerate}
-
-The competition for dancers to decide whether or not they can dance on stage is managed by two queues.
-These queues are maintained using a token passing system.
-The tokens are passed linearly amongst the dancers, so this forms a simple queue where dancers never actually leave the queue.
-Each queue is responsible for determining one of the two dancers to appear on stage.
-
-The first queue is only for aged dancers.
-It is maintained by the \texttt{tokenAged} token.
-Dancers in this queue try to become the aged dancer \texttt{dancerAged}.
-Similarly, the second queue is for all dancers.
-It is maintained by the \texttt{tokenProOrAged} token.
-Dancers in this queue try to become the aged dancer \texttt{dancerProOrAged}.
-Finally, there is also a precedence between the queues.
-The aged dancer queue is processed first until an aged dancer is selected.
-After this selection the pro dancer is selected.
-
-Once a single dancer has been allowed into the critical section, they must determine if they are allowed to go on stage.
-The conditions for a dancer being allowed to go on stage are:
-\begin{itemize}
-    \item The dancer was not the one of the dancers most recently on stage.
-    \item There are audience members waiting to watch the dancer, or
-    \item If there is no audience member wishing to watch them, no audience member must be waiting to watch any other dancer.
-          (For the aged dancer selection this is reduced to no audience member wishing to watch any aged dancer).
-    \item (The edge case). If there are only two aged dancers, and the aged dancer has been selected, the next dancer must be a pro dancer.
-\end{itemize}
-
-If the dancer can go on stage, then it
-\begin{enumerate}
-    \item Sets itself as the appropriate dancer,
-    \item Waits for their partner, and 
-    \item Waits for audience members to get to watching them.
-\end{enumerate}
-
-Finally, after dancing, various variables need to be reset.
-To avoid duplication, the aged dancer always resets these variables.
-However, it only does so once the pro dancer has left stage.
-This is ensured by the aged dancer waiting on the \texttt{dancerProDone} flag.
 
 \section{Sketch Proof}
-We present a sketch proof of the desired properties in our modelling of the ``Dancing with the Shakes System''.
-These properties are also tested in Promela to ensure they hold.
+We present a sketch proof that our model of the ``Dancing with the Shakes'' system follows all of the rules.
 
-The properties that we desire are:
 \begin{itemize}
-    \item There are always two dancers on stage (unless dancers on stage are being selected).
-    \item No dancer can dance on stage twice in a row.
-    \item Mutual exclusion for the dancer critical section.
-    \item Linear waiting of the dancers is enforced.
-    \item Lack of unnecessary delay for audience members.
-\end{itemize}
+    \item {\bf At any given time at most one show by precisely two dancers of which at least one is aged is happening on stage.}
 
-\subsection{Always two Dancers on stage}
-Two give this property we assume that there must be at least two dancers, one eligible to be the aged dancer, and one eligible to be the pro dancer.
-Then, by the linear waiting of dancers, every dancer must be considered, thus the eligible dancers will eventually be reached.
-Finally, the dancers wait for each other before going on stage.
+To get onto the stage, a dancer must be the dancer stored in \texttt{dancerAged} or \texttt{dancerProOrAged}. This ensures that only these 2 dancers can get onto the stage. 
 
-Therefore, unless the next dancers to appear on stage are being selected, there are always two dancers on stage.
+Furthermore, one dancer cannot be both dancerAged and dancerProOrAged because the code is structured such that after a dancer is selected, it cannot loop around again to also be selected as the other dancer until after it has finished dancing. This prevents there being only 1 dancer dancing on the stage.
 
-\subsection{No dancing twice in a row}
-The previous dancers on stage are stored in two variables \texttt{previousAged} and \texttt{previousProOrAged}.
-These only change when dancers leave the stage.
-Also, a dancer is not allowed to enter the stage if they are one of these variables.
+Also, the first condition that a dancer must pass before it can set itself as a current dancer is that either \texttt{dancerAged} or \texttt{dancerProOrAged} is currently available, i.e. set to NO\_DANCER. Therefore, after the 2 dancers have already been selected, more dancers cannot become the current dancers and get onto the stage. The selectDancerMutex also surrounds all of the code for dancer selection, preventing multiple dancers being inside the selection code already when \texttt{dancerAged} or \texttt{dancerProOrAged} is being set.
 
-Therefore, a dancer cannot be selected to dance on stage two times in a row.
+Finally, as described earlier, the dancers whose \texttt{id} is less than \texttt{nAged} are considered aged dancers. The only dancers allowed to be set as the \texttt{dancerAged} dancer are those that have such an \texttt{id}. Thus, we ensure that one of the dancers is always aged.
 
-\subsection{Mutual Exclusion}
-There are two critical sections in the dancer.
-The first is in the pre-protocol for determining which dancer should appear on stage.
-The second is in the post-protocol for when dancers leave stage.
-Entering these critical sections are controlled by await statements and the \texttt{dancerCS} flag.
+    \item {\bf Nobody dances for two songs in a row.}
 
-First consider the pre-dancing protocol critical section.
-To enter this section, dancers must pass the await condition, given below.
-\begin{lstlisting}
-(!dancerCS &&
-  (
-    (dancerAged == NO_DANCER && dancerProOrAged == NO_DANCER &&
-     tokenAged      == id)
-    ||
-    (dancerAged != NO_DANCER && dancerProOrAged == NO_DANCER &&
-     tokenProOrAged == id)
-  )
-);
-\end{lstlisting}
-The first property of this await is that the \texttt{dancerCS} flag is not set.
-Thus if set, no dancer can pass into the CS.
-Thus mutual exclusion can only be broken if no dancers are in the CS, and two are able to pass the await.
+The previous dancers on stage are stored in two variables \texttt{previousAged} and \texttt{previousProOrAged}. These only change when dancers leave the stage. A dancer is not allowed to be selected as one of the current dancers if they are one of the dancers in these variables. Therefore, a dancer cannot be selected to dance on stage twice in a row.
 
-The second element to the await is control of which queue (aged or pro) should be used to allow a dancer in the CS.
-The determination of the queue is made on whether the aged dancer has been selected yet.
-Thus the two parts of the element are independent, so only one can take effect at any point in time.
-Finally each are guarded by the respective queue token.
-As this can match only one dancer, when $\texttt{dancerCS} = 0$ the await condition is true for only one dancer.
+    \item {\bf If audience member m requests dancer d while no other audience member is requesting or watching a conflicting dancer, then m should see d on stage/TV within a bounded number of his own steps (in the requesting phase)}
 
-Finally, we ensure that \texttt{dancerAged} and \texttt{dancerProOrAged} are only changed within blocks where $\texttt{dancerCS} = 1$.
-This means even if the active queue changes, the await condition is still false.
+In our system, before a dancer can set itself as one of the current dancers there must either be no valid requests for other dancers or the dancer must itself be one of the requested dancers. Therefore, if m requests dancer d and there is nobody else requesting or watching a conflicting dancer, then no dancer other than d will be allowed to set itself as one of the current dancers. This is because every other dancer will see that there are valid requests but that they themselves have not been requested. Only dancer d will see that it has been requested and thus be allowed to set itself as one of the current dancers. After that, d will indicate that its request is no longer valid, allowing the remaining dancers to compete to be the other dancer. Thus, d will always get to be in the next pair to dance on stage, so m will get to see it on stage 
 
-We must also consider the post-dancing protocol critical section.
-Firstly, only the aged dancer may enter this section.
-Also, as both dancers are selected, no other dancer at the pre-dancing await can enter their CS.
-Thus is is always safe to enter this critical section.
-Further by setting \texttt{dancerCS}, this ensures the pre and post CS are mutually exclusive.
+    \item {\bf If audience member m requests dancer d then m must eventually watch d dance}
 
-Therefore, we have mutual exclusion of the dancer critical sections.
+As described earlier, the dancers compete to try and be selected as the current dancer. If there are requests for multiple dancers, including m's request for d, then these dancers will all compete and can all potentially become the current dancer. If we assume weak fairness, then eventually dancer d will get a chance to compete and until its request is fulfilled, it will keep trying to become the current dancer. Hence eventually, it will beat the other dancers, acquire the selectDancerMutex and because there is a request for it, it will become the current dancer (and will signal the audience member m to watch it).
 
-\subsection{Linear Waiting}
-We use linear waiting to ensure a lack of unnecessary delay for audience members.
-In particular we are interested in the linear waiting of dancers who have audience members that wish to view them on stage.
-
-To give linear waiting we need to have a:
-\begin{itemize}
-    \item A FIFO queue, and
-    \item Dancers (that we are interested in) cannot overtake each other
-\end{itemize}
-
-We get a FIFO queue from placing all of the dancers permanently into the queue.
-We then maintain the current head of the queue with token.
-This token is changed by always incrementing it (and wrapping around when the token exceeds the maximum value).
-This ensures a FIFO queue.
-
-Given the token passing method, dancers cannot overtake each other.
-However dancers can rescind their desire to dance and not take to the stage.
-What we are actually interested is a sub-queue of the dancers which are those who have audience members waiting to see them.
-We say we have linear waiting if those dancers cannot always rescind their desire to dance.
-
-We consider the cases a dancer may rescinds its desire to dance, as given in section \ref{sub:dancer-threads}:
-\begin{itemize}
-    \item If they danced previously, the are moved to the back of the queue. This is OK as the dancer is not eligible to dance.
-    \item If they are an aged dancer, and there are only two aged dancers, they are in the pro queue.
-          Thus rescinding is OK, as the dancer will be considered in the aged queue.
-    \item Otherwise the dancer will dance, as their \texttt{toWatch} value will be positive.
-\end{itemize}
-
-Therefore we get linear waiting.
-
-\subsection{Lack of unnecessary delay}
-To give lack of unnecessary delay we make the following assumptions
-\begin{itemize}
-    \item Only one audience members is waiting on a dancer to appear on stage.
-    \item 
 \end{itemize}
 
 \section{Performance}
+In the dancer threads, the time taken to select the dancers depends upon how these threads are scheduled. If there are no dancers currently requested by audience members, then at most after all of the dancers have been scheduled once and had a chance to acquire the selectDancerMutex, there will be two dancers ready to dance on stage. If there are requests, then at worst we would have to go through all of the dancers once to fulfil one request and then go through them once more to find another dancer who is allowed/requested to dance. Thus, the time taken by this selection phase will be determined by the number of dancers and how long it takes for them all to be scheduled as described.
+
+After the selection phase, the loops that occur while the dancer is dancing, finishing and leaving the stage iterate through the number of dancers and the number of audience members. Hence, the time taken for this part of the dancer threads is based on the sum of the number of dancers and the number of audience members.
+
+Meanwhile, the audience spend most of their time waiting for the dancer that they request. Without these periods of waiting, these threads would simply complete in constant time.
+
+The time spent on communication between the dancer and audience threads is based on the number of audience members. This is because this communication involves the dancers signalling all of the audience members currently waiting on them, and at maximum, all of the audience members can be waiting on one dancer, so the dancer will have to iterate through all of them. The current dancers communicate with each other using variables like aged/proDancing, leaveTogetherSemaphore and dancerProOrAgedDone, which are just constant time communication. The dancer threads also need to reset arrays like validRequest, which are the same size as the number of dancers, so there is also some communication that takes time based upon the number of dancers.
 
 \section{Promela Proof}
 To recap, the properties that we desire are:
