@@ -125,6 +125,7 @@ proctype senior(byte id) {
     od;
     printf("%d: Terminated Loop\n", id);
 
+    assert(state == ST_TALK || state == ST_MOMENT);
     if
     :: state == ST_TALK ->
         printf("%d: Talking to: %d\n", id, talkTo);
@@ -139,7 +140,6 @@ proctype senior(byte id) {
             reqSent++;
         od;
     :: state == ST_MOMENT -> printf("%d: Seniors Moment\n", id);
-    :: else -> assert(0);
     fi;
 }
 
