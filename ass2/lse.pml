@@ -1,5 +1,4 @@
-
-#define N_SENIORS 5
+#define N_SENIORS 3
 
 // States
 #define ST_NOTHING      0
@@ -38,6 +37,9 @@ byte numConversations
 
 // (Auxiliary) Track number of senior moments
 byte numMoments
+
+// (Auxiliary) Track number of dead seniors
+byte numDead
 
 proctype Senior(byte id) {
     byte state;         // My current state
@@ -89,20 +91,34 @@ start:
             // If all else are done, then have seniors moment
             // Else send messages and continue
             //   Only send messages to seniors we are connected to
+            //   We may die before sending a request message
             if
-            :: notDoneCount == 0 -> state = ST_MOMENT;
+            :: notDoneCount == 0 ->
+                // If we are supposed to die then die rather than have moment
+                if
+                :: die == 0 -> state = ST_MOMENT;
+                :: die == 1 -> state = ST_DEAD;
+                fi;
             :: else ->
                 i = 0;
                 do
                 :: i >= id -> break;
                 :: i <  id ->
+                    // We could die before sending the message
                     if
-                    :: connections[id].b[i] == 1 -> channels[id].c[i]!MSG_REQ;
+                    :: die == 1 -> state = ST_DEAD;
+                    :: die == 1 -> skip;
+                    :: die == 0 -> skip;
+                    fi;
+                    if
+                    :: state == ST_TALK &&
+                       connections[id].b[i] == 1 ->
+                        channels[id].c[i]!MSG_REQ;
+                        state = ST_SENTREQ;
                     :: else -> skip;
                     fi;
                     i++;
                 od;
-                state = ST_SENTREQ;
             fi;
 
         :: state == ST_SENTREQ ->
@@ -182,6 +198,7 @@ start:
     assert(state == ST_TALK || state == ST_MOMENT || state == ST_DEAD);
     assert(state == ST_TALK || state == ST_DEAD || talkTo == NO_TALKING);
     assert(state == ST_MOMENT || state == ST_DEAD || talkTo < N_SENIORS);
+    assert(state == ST_TALK || state == ST_MOMENT || (die == 1 && state == ST_DEAD));
 
     // Do finishing state tasks
     if
@@ -200,7 +217,7 @@ start:
         od;
     :: state == ST_DEAD ->
         printf("%d: Dead\n", id);
-        d_step{numMoments++};
+        d_step{numDead++};
         i = 0;
         do
         :: i == N_SENIORS -> break;
@@ -229,6 +246,7 @@ init {
         // Set auxiliary variables
         numConversations = 0;
         numMoments = 0;
+        numDead = 0;
 
         // Create connections
         i = 0; j = 0;
@@ -269,6 +287,7 @@ init {
 
 // Defines for LTL's
 #define pstart      Senior[0]@start
+#define pfin        Senior[0]@doFinish
 #define pterm       Senior[0]@terminate
 #define qstart      Senior[1]@start
 #define qterm       Senior[1]@terminate
@@ -283,5 +302,6 @@ ltl term3 { [](rstart -> <>rterm) };
 // Verify number of conversations is ok
 ltl conv1 { []((numConversations / 2) <= (N_SENIORS / 2)) };
 ltl conv2 { [](numMoments <= N_SENIORS) };
-ltl conv3 { []((numConversations / 2 + numMoments) <= N_SENIORS) };
+ltl conv3 { [](numDead <= N_SENIORS) };
+ltl conv4 { []((numConversations / 2 + numMoments + numDead) <= N_SENIORS) };
 
