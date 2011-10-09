@@ -7,6 +7,7 @@
 #define ST_WAITCONF     2
 #define ST_TALK         3
 #define ST_MOMENT       4
+#define ST_DEAD         5
 
 // Messages
 #define MSG_REQ         0
@@ -46,7 +47,9 @@ proctype Senior(byte id) {
     byte notFin[N_SENIORS];  // Records if the seniors are done
     byte i;             // Counter
     byte notDoneCount;  // Counter for notDone
+    byte die;           // Represents if this Senior should die
 
+    // Initialise, state, connections and death
 start: 
     state = ST_NOTHING;
     i = 0;
@@ -59,9 +62,13 @@ start:
         fi;
         i++;
     od;
+    if
+    :: true -> die = 0;
+    :: true -> die = 1;
+    fi;
 
     do
-    :: state == ST_TALK || state == ST_MOMENT -> break;
+    :: state == ST_TALK || state == ST_MOMENT  || state == ST_DEAD -> break;
     :: else ->
         printf("%d: State: %d\n", id, state);
 
@@ -106,21 +113,32 @@ start:
             :: read == N_SENIORS -> break;
             :: read < N_SENIORS ->
                 if
-                :: connections[id].b[read] == 0 -> skip;
+                :: connections[id].b[read] == 0 ||
+                   notFin[read] == 0
+                   -> skip;
                 :: else -> 
                     channels[read].c[id]?recvMsg;
                     if
                     :: state == ST_SENTREQ ->
                         // We are happy to stay recieve Requests/Ack's
+                        // But, we should die before sending conf/ack
                         if
                         :: recvMsg == MSG_REQ -> 
-                            state = ST_WAITCONF;
-                            channels[id].c[read]!MSG_ACK;
-                            talkTo = read;
+                            if
+                            :: die == 1 -> state = ST_DEAD;
+                            :: else ->
+                                state = ST_WAITCONF;
+                                channels[id].c[read]!MSG_ACK;
+                                talkTo = read;
+                            fi;
                         :: recvMsg == MSG_ACK ->
-                            state = ST_TALK;
-                            channels[id].c[read]!MSG_CONF;
-                            talkTo = read;
+                            if
+                            :: die == 1 -> state = ST_DEAD;
+                            :: else ->
+                                state = ST_TALK;
+                                channels[id].c[read]!MSG_CONF;
+                                talkTo = read;
+                            fi;
                         :: recvMsg == MSG_FIN -> notFin[read] = 0;
                         :: else -> skip;
                         fi;
@@ -160,13 +178,29 @@ start:
     od;
     printf("%d: Terminated Loop\n", id);
 
-    assert(state == ST_TALK || state == ST_MOMENT);
-    assert(state == ST_TALK || talkTo == NO_TALKING);
-    assert(state == ST_MOMENT || talkTo < N_SENIORS);
+    // assert appropriate values
+    assert(state == ST_TALK || state == ST_MOMENT || state == ST_DEAD);
+    assert(state == ST_TALK || state == ST_DEAD || talkTo == NO_TALKING);
+    assert(state == ST_MOMENT || state == ST_DEAD || talkTo < N_SENIORS);
+
+    // Do finishing state tasks
     if
     :: state == ST_TALK ->
         printf("%d: Talking to: %d\n", id, talkTo);
         d_step{numConversations++};
+        i = 0;
+        do
+        :: i == N_SENIORS -> break;
+        :: i <  N_SENIORS ->
+            if
+            :: i != id -> channels[id].c[i]!MSG_FIN;
+            :: else -> skip;
+            fi;
+            i++;
+        od;
+    :: state == ST_DEAD ->
+        printf("%d: Dead\n", id);
+        d_step{numMoments++};
         i = 0;
         do
         :: i == N_SENIORS -> break;
