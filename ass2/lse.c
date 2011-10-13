@@ -27,7 +27,6 @@
 // Constants
 #define NO_TALKING      255
 
-
 void senior(int id, int nSeniors) {
     int state;         // My current state
     int recvMsg;       // Message recieved on a channel
@@ -46,12 +45,8 @@ void senior(int id, int nSeniors) {
 
     printf("Senior %d started, number of seniors is %d\n", id, nSeniors);
 
-    printf("Connections: %p, notFind: %p\n", connections, notFin);
-
     //Receive connections data structure
-    MPI_Recv(&connections, nSeniors, MPI_INT, 0, 1, MPI_COMM_WORLD, &stat);
-
-    printf("Connections: %p, notFind: %p\n", connections, notFin);
+    MPI_Recv(connections, nSeniors, MPI_INT, 0, 1, MPI_COMM_WORLD, &stat);
 
     printf("Senior %d received connections: %d %d %d\n", id, connections[0], connections[1], connections[2]);
     
@@ -77,9 +72,11 @@ void senior(int id, int nSeniors) {
             talkTo = NO_TALKING;
 
             //Check if others have finished deciding who to talk to
+            notDoneCount = 0;
             for (i = 0; i != nSeniors; i++) {
                 notDoneCount += notFin[i];
             }
+            printf("%d: notDoneCount: %d\n", id, notDoneCount);
         
             //If all others are done, we must have a seniors moment, unless we are supposed to die
             if (notDoneCount == 0) {
@@ -88,12 +85,14 @@ void senior(int id, int nSeniors) {
             } else {
                 //Find a connected senior to send a request to
                 for (i = 0; i != id; i++) {
-                    //Random numbers
-                    if (state == ST_TALK && connections[i] == 1) {
+                    //Death
+                    if (state == ST_NOTHING && connections[i] == 1) {
                         sendMsg = MSG_REQ;
                         MPI_Send(&sendMsg, 1, MPI_INT, i, 1, MPI_COMM_WORLD); //Setting tag to 1 and using Send rather than ISend
-                        state = ST_SENTREQ;
                     }
+                }
+                if (state != ST_DEAD) {
+                    state = ST_SENTREQ;
                 }
             }
         } else if (state == ST_SENTREQ) {
@@ -124,7 +123,7 @@ void senior(int id, int nSeniors) {
                             }
                         //The connected senior has already finished
                         } else if (recvMsg == MSG_FIN) {
-                            notFin[i] == 0;
+                            notFin[i] = 0;
                         }
                     //We are no longer in SENTREQ, decline everything that needs a response
                     } else {
@@ -132,7 +131,7 @@ void senior(int id, int nSeniors) {
                             sendMsg = MSG_DECL;
                             MPI_Send(&sendMsg, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
                         } else if (recvMsg == MSG_FIN) {
-                            notFin[i] == 0;
+                            notFin[i] = 0;
                         }
                     }
                 }
@@ -193,12 +192,14 @@ void senior(int id, int nSeniors) {
 void *initialiser(void *filename) {
     printf("Initialiser thread started successfully\n");
 
-    int connections[3] = {1,1,1};
+    int connections0[3] = {0,1,1};
+    int connections1[3] = {1,0,1};
+    int connections2[3] = {1,1,0};
 
     printf("Initialiser attempting to send connections\n");
-    MPI_Send(&connections, 3, MPI_INT, 2, 1, MPI_COMM_WORLD);
-    MPI_Send(&connections, 3, MPI_INT, 1, 1, MPI_COMM_WORLD);
-    MPI_Send(&connections, 3, MPI_INT, 0, 1, MPI_COMM_WORLD);
+    MPI_Send(&connections2, 3, MPI_INT, 2, 1, MPI_COMM_WORLD);
+    MPI_Send(&connections1, 3, MPI_INT, 1, 1, MPI_COMM_WORLD);
+    MPI_Send(&connections0, 3, MPI_INT, 0, 1, MPI_COMM_WORLD);
     printf("Initialiser successfully sent connections\n");
 }
 
@@ -238,207 +239,3 @@ int main (int argc, char *argv[]) {
 
     MPI_Finalize();
 }
-
-//init {
-//    atomic {
-//        byte i;
-//        byte j;
-//
-//        // Set auxiliary variables
-//        numConversations = 0;
-//        numMoments = 0;
-//        numDead = 0;
-//
-//        // Create connections
-//        i = 0; j = 0;
-//        do
-//        :: i == N_SENIORS -> break;
-//        :: i != N_SENIORS ->
-//            j = i;
-//            connections[i].b[j] = 0;
-//            printf("Connections[%d][%d] = %d\n", i, j, 0);
-//            j++;
-//            do
-//            :: j == N_SENIORS -> break;
-//            :: j != N_SENIORS ->
-//                if
-//                :: true ->
-//                    connections[i].b[j] = 0;
-//                    connections[j].b[i] = 0;
-//                :: true ->
-//                    connections[i].b[j] = 1;
-//                    connections[j].b[i] = 1;
-//                fi;
-//                printf("Connections[%d][%d] = %d\n", i, j, connections[i].b[j]);
-//                j++;
-//            od;
-//            i++;
-//        od;
-//
-//        // Spawn processes
-//        i = 0;
-//        do
-//        :: i == N_SENIORS -> break;
-//        :: i != N_SENIORS ->
-//            run Senior(i);
-//            i++;
-//        od;
-//    }
-//}
-
-//    do
-//    :: state == ST_TALK || state == ST_MOMENT  || state == ST_DEAD -> break;
-//    :: else ->
-//        printf("%d: State: %d\n", id, state);
-//
-//        if
-//        :: state == ST_NOTHING ->
-//            // If all else are done, then have seniors moment
-//            // Else send messages and continue
-//            //   Only send messages to seniors we are connected to
-//            //   We may die before sending a request message
-//            if
-//            :: notDoneCount == 0 ->
-//                // If we are supposed to die then die rather than have moment
-//                if
-//                :: die == 0 -> state = ST_MOMENT;
-//                :: die == 1 -> state = ST_DEAD;
-//                fi;
-//            :: else ->
-//                i = 0;
-//                do
-//                :: i >= id -> break;
-//                :: i <  id ->
-//                    // We could die before sending the message
-//                    if
-//                    :: die == 1 -> state = ST_DEAD;
-//                    :: die == 1 -> skip;
-//                    :: die == 0 -> skip;
-//                    fi;
-//                    if
-//                    :: state == ST_TALK &&
-//                       connections[id].b[i] == 1 ->
-//                        channels[id].c[i]!MSG_REQ;
-//                        state = ST_SENTREQ;
-//                    :: else -> skip;
-//                    fi;
-//                    i++;
-//                od;
-//            fi;
-//
-//        :: state == ST_SENTREQ ->
-//            // Do a full round of reading - that is read from each connected senior
-//            //  Only read from seniors we are connected to
-//            read = 0;
-//            do
-//            :: read == N_SENIORS -> break;
-//            :: read < N_SENIORS ->
-//                if
-//                :: connections[id].b[read] == 0 ||
-//                   notFin[read] == 0
-//                   -> skip;
-//                :: else -> 
-//                    channels[read].c[id]?recvMsg;
-//                    if
-//                    :: state == ST_SENTREQ ->
-//                        // We are happy to stay recieve Requests/Ack's
-//                        // But, we should die before sending conf/ack
-//                        if
-//                        :: recvMsg == MSG_REQ -> 
-//                            if
-//                            :: die == 1 -> state = ST_DEAD;
-//                            :: else ->
-//                                state = ST_WAITCONF;
-//                                channels[id].c[read]!MSG_ACK;
-//                                talkTo = read;
-//                            fi;
-//                        :: recvMsg == MSG_ACK ->
-//                            if
-//                            :: die == 1 -> state = ST_DEAD;
-//                            :: else ->
-//                                state = ST_TALK;
-//                                channels[id].c[read]!MSG_CONF;
-//                                talkTo = read;
-//                            fi;
-//                        :: recvMsg == MSG_FIN -> notFin[read] = 0;
-//                        :: else -> skip;
-//                        fi;
-//                    :: else -> 
-//                        // We have changed state
-//                        //   decline anything that needs a response
-//                        if
-//                        :: recvMsg == MSG_REQ || recvMsg == MSG_ACK ->
-//                            channels[id].c[read]!MSG_DECL;
-//                        :: recvMsg == MSG_FIN -> notFin[read] = 0;
-//                        :: else -> skip;
-//                        fi;
-//                    fi;
-//                fi;
-//                read++;
-//            od;
-//
-//            // If we have not changed state then we haven't entered a communication
-//            //   return to nothing state for another round of sending
-//            if
-//            :: state == ST_SENTREQ -> state = ST_NOTHING;
-//            :: else -> skip;
-//            fi;
-//        :: state == ST_WAITCONF ->
-//            // Wait on the senior we sent an ACK to
-//            channels[talkTo].c[id]?recvMsg;
-//            if
-//            :: recvMsg == MSG_CONF -> state = ST_TALK;
-//            :: else                ->
-//                state = ST_NOTHING;
-//                if
-//                :: recvMsg == MSG_FIN  -> notFin[talkTo] = 0;
-//                :: else                -> skip;
-//                fi;
-//            fi;
-//        fi;
-//    od;
-//    printf("%d: Terminated Loop\n", id);
-//
-//    // assert appropriate values
-//    assert(state == ST_TALK || state == ST_MOMENT || state == ST_DEAD);
-//    assert(state == ST_TALK || state == ST_DEAD || talkTo == NO_TALKING);
-//    assert(state == ST_MOMENT || state == ST_DEAD || talkTo < N_SENIORS);
-//    assert(state == ST_TALK || state == ST_MOMENT || (die == 1 && state == ST_DEAD));
-//
-//    // Do finishing state tasks
-//    if
-//    :: state == ST_TALK ->
-//        printf("%d: Talking to: %d\n", id, talkTo);
-//        d_step{numConversations++};
-//        i = 0;
-//        do
-//        :: i == N_SENIORS -> break;
-//        :: i <  N_SENIORS ->
-//            if
-//            :: i != id -> channels[id].c[i]!MSG_FIN;
-//            :: else -> skip;
-//            fi;
-//            i++;
-//        od;
-//    :: state == ST_DEAD ->
-//        printf("%d: Dead\n", id);
-//        d_step{numDead++};
-//        i = 0;
-//        do
-//        :: i == N_SENIORS -> break;
-//        :: i <  N_SENIORS ->
-//            if
-//            :: i != id -> channels[id].c[i]!MSG_FIN;
-//            :: else -> skip;
-//            fi;
-//            i++;
-//        od;
-//    :: state == ST_MOMENT ->
-//        d_step{numMoments++};
-//        printf("%d: Seniors Moment\n", id);
-//    fi;
-//
-//    // For termination
-//terminate:
-//    skip;
-//}
