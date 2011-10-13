@@ -7,8 +7,6 @@
 //For random?
 #include <time.h>
 
-#define N_SENIORS 3
-
 // States
 #define ST_NOTHING      0
 #define ST_SENTREQ      1
@@ -48,7 +46,11 @@ void senior(int id, int nSeniors) {
     //Receive connections data structure
     MPI_Recv(connections, nSeniors, MPI_INT, 0, 1, MPI_COMM_WORLD, &stat);
 
-    printf("Senior %d received connections: %d %d %d\n", id, connections[0], connections[1], connections[2]);
+    printf("Senior %d received connections: ", id);
+    for (i = 0; i != nSeniors; i++) {
+        printf("%d ", connections[i]);
+    }
+    printf("\n");
     
     //Initialise connections. If not connected, consider the connection finished.
     for (i = 0; i != nSeniors; i++) {
@@ -191,16 +193,36 @@ void senior(int id, int nSeniors) {
 
 void *initialiser(void *filename) {
     printf("Initialiser thread started successfully\n");
+    printf("File to use: %s\n", filename);
 
-    int connections0[3] = {0,1,1};
-    int connections1[3] = {1,0,1};
-    int connections2[3] = {1,1,0};
+    char line[1024];
+    FILE *f = fopen(filename, "r");
+
+    printf("Successfully opened file: %s\n", filename);
+    fgets(line, sizeof line, f);
+    int nSeniors = atoi(line);
+    int **connections = malloc(sizeof(int *) * nSeniors);
+    printf("Got nSeniors = %d from file\n", nSeniors);
 
     printf("Initialiser attempting to send connections\n");
-    MPI_Send(&connections2, 3, MPI_INT, 2, 1, MPI_COMM_WORLD);
-    MPI_Send(&connections1, 3, MPI_INT, 1, 1, MPI_COMM_WORLD);
-    MPI_Send(&connections0, 3, MPI_INT, 0, 1, MPI_COMM_WORLD);
-    printf("Initialiser successfully sent connections\n");
+    int i = 0;
+    for (i = 0; i != nSeniors; i++) {
+        connections[i] = malloc(sizeof(int) * nSeniors);
+
+        fgets(line, sizeof line, f);
+        printf("Got connections line %s for id %d\n", line, i);
+
+        int j = 0;
+        for (j = 0; j != nSeniors; j++) {
+            printf("Reading digit %d for %d got %d\n", j, i, line[j] - '0');
+            connections[i][j] = line[j] - '0';
+        }
+
+        MPI_Send(connections[i], nSeniors, MPI_INT, i, 1, MPI_COMM_WORLD);
+        printf("Initialiser successfully sent connections to %d\n", i);
+    }
+    printf("Initialiser successfully sent all connections\n");
+    fclose(f);
 }
 
 //Takes the input data file and starts up the other processes
@@ -227,7 +249,6 @@ int main (int argc, char *argv[]) {
 
         printf("Attempting to spawn initialiser thread\n");
 
-        //printf("Got connections file: %s", argv[1]);
         rc = pthread_create(&initialiserThread, &attr, initialiser, (void *)argv[1]);
         if (rc) {
             printf("***** Could not create thread. Return code from pthread_create() is: %d\n", rc);
