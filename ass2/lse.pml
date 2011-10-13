@@ -111,14 +111,17 @@ start:
                     :: die == 0 -> skip;
                     fi;
                     if
-                    :: state == ST_TALK &&
+                    :: state == ST_NOTHING &&
                        connections[id].b[i] == 1 ->
                         channels[id].c[i]!MSG_REQ;
-                        state = ST_SENTREQ;
                     :: else -> skip;
                     fi;
                     i++;
                 od;
+                if
+                :: state != ST_DEAD -> state = ST_SENTREQ;
+                :: else -> skip;
+                fi;
             fi;
 
         :: state == ST_SENTREQ ->
