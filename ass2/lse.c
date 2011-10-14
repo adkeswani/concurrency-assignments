@@ -20,11 +20,68 @@
 #define MSG_CONF        2
 #define MSG_DECL        3
 #define MSG_FIN         4
+#define MSG_TIMEOUT     5
 
 // Constants
 #define NO_TALKING      255
 #define FILE_BUFFER_LENGTH 1024
 #define EVEN_DEATH_PROB 0.5
+#define TIMEOUT_INTERVAL (0.1 * 1000000)
+#define TIMEOUT_TIME (2.0 * 1000000)
+
+int sendWithTimeout(int id, int dest, int sendMsg) {
+    float time = 0.0;
+    int retVal = 0;
+    MPI_Request request;
+    int flag = 0;
+
+    MPI_Isend(&sendMsg, 1, MPI_INT, dest, 1, MPI_COMM_WORLD, &request);
+    printf("%d waiting for %d to accept\n", id, dest);
+
+    while (1) {
+        usleep(TIMEOUT_INTERVAL);
+        MPI_Test(&request, &flag, MPI_STATUS_IGNORE);
+        if (flag) {
+            break;
+        } else if (time >= TIMEOUT_TIME) {
+            MPI_Cancel(&request);
+            retVal = 1;
+            break;
+        } else {
+            time += TIMEOUT_INTERVAL;
+        }
+    }
+
+    return retVal;
+}
+
+int receiveWithTimeout(int id, int src) {
+    float time = 0.0;
+    int recvMsg = 0;
+    MPI_Request request;
+    int flag = 0;
+
+    MPI_Irecv(&recvMsg, 1, MPI_INT, src, 1, MPI_COMM_WORLD, &request);
+    printf("%d waiting to receive from %d\n", id, src);
+
+    while (1) {
+        usleep(TIMEOUT_INTERVAL);
+        MPI_Test(&request, &flag, MPI_STATUS_IGNORE);
+        if (flag) {
+            break;
+        } else if (time >= TIMEOUT_TIME) {
+            printf("%d believes %d is dead\n", id, src);
+            MPI_Cancel(&request);
+            recvMsg = MSG_TIMEOUT;
+            break;
+        } else {
+            time += TIMEOUT_INTERVAL;
+            printf("%f %f\n", time, TIMEOUT_TIME);
+        }
+    }
+
+    return recvMsg;
+}
 
 void senior(int id, int nSeniors, double deathProb) {
     int state;         // My current state
@@ -36,14 +93,13 @@ void senior(int id, int nSeniors, double deathProb) {
     int mayDie;         //Represents if this senior may die based upon the input file
     int die;           // Represents if this Senior should die
     int sendMsg;       // Message to send
-    MPI_Status stat;   //Status of received message
     int *connections = malloc(sizeof(int) * nSeniors); // Record of connections
 
     // Initialise, state, connections and death
     printf("Senior %d started, number of seniors is %d\n", id, nSeniors);
 
     //Receive connections data structure
-    MPI_Recv(connections, nSeniors, MPI_INT, 0, 1, MPI_COMM_WORLD, &stat);
+    MPI_Recv(connections, nSeniors, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     printf("Senior %d received connections: ", id);
     for (i = 0; i != nSeniors; i++) {
@@ -52,7 +108,7 @@ void senior(int id, int nSeniors, double deathProb) {
     printf("\n");
 
      //Receive die value
-    MPI_Recv(&mayDie, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, &stat);
+    MPI_Recv(&mayDie, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     printf("Senior %d has mayDie value: %d and death probability is %f\n", id, mayDie, deathProb);
 
     //Initialise connections. If not connected, consider the connection finished.
@@ -69,10 +125,10 @@ void senior(int id, int nSeniors, double deathProb) {
     state = ST_NOTHING;
     if (mayDie == 1 && (((float)rand() / (float)RAND_MAX) < deathProb)) {
         die = 1;
-        printf("Senior %d will die\n", id);
+        printf("Senior %d could die\n", id);
     } else {
         die = 0;
-        printf("Senior %d will not die\n", id);
+        printf("Senior %d cannot die\n", id);
     }
 
     //Death does not work yet, uncomment this to disable death
@@ -105,7 +161,10 @@ void senior(int id, int nSeniors, double deathProb) {
                     }
                     if (state == ST_NOTHING && connections[i] == 1) {
                         sendMsg = MSG_REQ;
-                        MPI_Send(&sendMsg, 1, MPI_INT, i, 1, MPI_COMM_WORLD); //Setting tag to 1 and using Send rather than ISend
+                        if (sendWithTimeout(id, i, sendMsg) != 0) {
+                            connections[i] = 0;
+                            notFin[i] = 0;
+                        }
                     }
                 }
                 state = ST_SENTREQ;
@@ -115,9 +174,19 @@ void senior(int id, int nSeniors, double deathProb) {
             for (i = 0; i < nSeniors; i++) {
                 //If we're not connected, ignore
                 if (connections[i] != 0 && notFin[i] != 0) {
-                    MPI_Recv(&recvMsg, 1, MPI_INT, i, 1, MPI_COMM_WORLD, &stat);
-                    //Timeouts will be implemented heeah
-                    if (state == ST_SENTREQ) {
+                    //Receive a message and time out if necessary
+                    recvMsg = receiveWithTimeout(id, i);
+                    printf("%d: Received message %d from %d\n", id, recvMsg, i);
+
+                    //So the problem is that we're waiting for a reply
+                    //But in the meantime, others who send to us...
+                    //could think we've died...
+                    //
+
+                    if (recvMsg = MSG_TIMEOUT) {
+                        connections[i] = 0;
+                        notFin[i] = 0;
+                    } else if (state == ST_SENTREQ) {
                         if (recvMsg == MSG_REQ) {
                             //We die before committing to a conversation
                             if (die == 1) {
@@ -125,8 +194,13 @@ void senior(int id, int nSeniors, double deathProb) {
                             } else {
                                 state = ST_WAITCONF;
                                 sendMsg = MSG_ACK;
-                                MPI_Send(&sendMsg, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
-                                talkTo = i;
+                                if (sendWithTimeout(id, i, sendMsg) == 0) {
+                                    talkTo = i;
+                                } else {
+                                    connections[i] = 0; 
+                                    notFin[i] = 0;
+                                    state = ST_SENTREQ;
+                                }
                             }
                         //Someone has acknowledged our request
                         } else if (recvMsg == MSG_ACK) {
@@ -136,7 +210,8 @@ void senior(int id, int nSeniors, double deathProb) {
                             } else {
                                 state = ST_TALK;
                                 sendMsg = MSG_CONF;
-                                MPI_Send(&sendMsg, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
+                                //Only a living person could have sent an ACK, so timeout is unnecessary
+                                MPI_Send(&sendMsg, 1, MPI_INT, talkTo, 1, MPI_COMM_WORLD);
                                 talkTo = i;
                             }
                         //The connected senior has already finished
@@ -147,7 +222,10 @@ void senior(int id, int nSeniors, double deathProb) {
                     } else {
                         if (recvMsg == MSG_REQ || recvMsg == MSG_ACK) {
                             sendMsg = MSG_DECL;
-                            MPI_Send(&sendMsg, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
+                            if (sendWithTimeout(id, i, sendMsg) != 0) {
+                                connections[i] = 0;
+                                notFin[i] = 0;
+                            }
                         } else if (recvMsg == MSG_FIN) {
                             notFin[i] = 0;
                         }
@@ -161,7 +239,10 @@ void senior(int id, int nSeniors, double deathProb) {
                 state = ST_NOTHING;
             }
         } else if (state == ST_WAITCONF) {
-            MPI_Recv(&recvMsg, 1, MPI_INT, talkTo, 1, MPI_COMM_WORLD, &stat);
+            assert(die != 1);
+
+            //Only a living person could have sent an ACK, so timeout is unnecessary
+            MPI_Recv(&recvMsg, 1, MPI_INT, talkTo, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             if (recvMsg == MSG_CONF) {
                 state = ST_TALK;
             } else {
@@ -183,12 +264,17 @@ void senior(int id, int nSeniors, double deathProb) {
     assert(state == ST_TALK || state == ST_MOMENT);
 
     if (state == ST_TALK) {
+        assert(die != 1);
+
         printf("%d: Talking to: %d\n", id, talkTo);
 
         for (i = 0; i != nSeniors; i++) {
-            if (i != id) {
+            if (connections[i] == 1) {
                 sendMsg = MSG_FIN;
-                MPI_Send(&sendMsg, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
+
+                if (sendWithTimeout(id, i, sendMsg) != 0) {
+                    connections[i] = 0;
+                }
             }
         }
     } else if (state == ST_MOMENT) {
