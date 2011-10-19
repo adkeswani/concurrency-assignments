@@ -130,57 +130,6 @@ proctype recvMessage(byte id; byte read) {
 
     // Decrement counter to say we have finished receiving
     d_step{threadCounter[id]--};
-
-    /*
-    if
-    :: state == ST_SENTREQ ->
-        // We are happy to stay recieve Requests/Ack's
-        // But, we should die before sending conf/ack
-        if
-        :: recvMsg == MSG_REQ -> 
-            if
-            :: die == 1 -> state = ST_DEAD;
-            :: else ->
-                state = ST_WAITCONF;
-                channels[id].c[read]!MSG_ACK;
-                talkTo = read;
-            fi;
-        :: recvMsg == MSG_ACK ->
-            if
-            :: die == 1 -> state = ST_DEAD;
-            :: else ->
-                state = ST_TALK;
-                channels[id].c[read]!MSG_CONF;
-                talkTo = read;
-            fi;
-        :: recvMsg == MSG_FIN -> notFin[read] = 0;
-        :: else -> skip;
-        fi;
-    :: else -> 
-        // We have changed state
-        //   decline anything that needs a response
-        if
-        :: recvMsg == MSG_REQ || recvMsg == MSG_ACK ->
-            channels[id].c[read]!MSG_DECL;
-        :: recvMsg == MSG_FIN -> notFin[read] = 0;
-        :: else -> skip;
-        fi;
-    fi;
-    */
-
-    /*
-    // Wait on the senior we sent an ACK to
-    channels[talkTo[id]].c[id]?recvMsg;
-    if
-    :: recvMsg == MSG_CONF -> states[id] = ST_TALK;
-    :: else                ->
-        states[id] = ST_NOTHING;
-        if
-        :: recvMsg == MSG_FIN  -> notFin[id].b[talkTo[id]] = 0;
-        :: else                -> skip;
-        fi;
-    fi;
-    */
 }
 
 proctype Senior(byte id) {
