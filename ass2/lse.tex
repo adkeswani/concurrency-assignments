@@ -161,9 +161,38 @@ Also, our implementation must ensure that if a senior is to die it does so befor
 Finally, it should be noted that the state machine ensures that any senior sends an extra \texttt{MSG\_CONF} or \texttt{MSG\_DECL} whenever a connected senior responds their request with an acknowledgement.
 
 \subsection{Death Detection}
+To detect death we exploit two properties of our solution:
+\begin{itemize}
+    \item For each valid channel $Chann(x,y)$ at least one message is sent along it each round.
+    \item Reading of messages is performed concurrently
+\end{itemize}
+
+Therefore, we place a timeout on reading from a channel.
+If this timeout occurs before a message is received, then we can immediately infer the senior we are attempting to receive from has died.
+
+It should be noted that we need to make the timeout large enough to ensure every senior has the opportunity to send their messages.
+Also, while messages are received concurrently, they are processed sequentially.
+This means we must allow time for the sequential processing to ensure seniors have adequate time to respond.
 
 \section{Verification}
+\label{sec:verification}
+
+\subsection{Degree of Death}
 
 \section{Complexity Analysis}
+The following facts are used in the complexity analysis:
+\begin{itemize}
+    \item As noted in section \ref{sec:verification}, at worst, one senior will enter an end state on each round.
+    \item Therefore, given $n$ seniors, there will be at most $n$ rounds.
+    \item Also in each round, each senior receives $k-1$ messages, where $k$ is the number of remaining seniors.
+\end{itemize}
+
+\subsection{Message Complexity}
+In each round, at worst, $(k-1)^2 = O(k^2)$ messages a sent amongst the remaining seniors.
+Given at most $n$ round, the message complexity is $\sum_{i=1}^n (i-1)^2$, which is $O(n^3)$
+
+\subsection{Time Complexity}
+As the workload is a constant factor of the number of messages received, $O(k)$ work is done by each senior, making $O(k^2)$ work done per round.
+Therefore, given at most $n$ rounds, the total Time Complexity is $O(n^3)$
 
 \end{document}
