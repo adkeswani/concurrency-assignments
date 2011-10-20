@@ -62,6 +62,10 @@ byte numMoments
 // (Auxiliary) Track number of dead seniors
 byte numDead
 
+// (Auxiliary) Track seniors who are talking and dead
+bool talking[N_SENIORS]
+bool dead[N_SENIORS]
+
 proctype recvMessage(byte id; byte read) {
     byte recvMsg;       // Message recieved on a channel
 
@@ -287,6 +291,13 @@ start:
         printf("***** %d: Seniors Moment\n", id);
     fi;
 
+    // For LTL to ensure everyone is talking if they can
+    if
+    :: states[id] == ST_TALK -> talking[id] = true
+    :: states[id] == ST_DEAD -> dead[id] = true
+    :: else -> skip
+    fi;
+
     // For termination
 terminate:
     skip;
@@ -358,4 +369,10 @@ ltl conv1 { []((numConversations / 2) <= (N_SENIORS / 2)) };
 ltl conv2 { [](numMoments <= N_SENIORS) };
 ltl conv3 { [](numDead <= N_SENIORS) };
 ltl conv4 { []((numConversations / 2 + numMoments + numDead) <= N_SENIORS) };
+
+// Verify there are no seniors who could be talking but aren't
+// For connected seniors, at least one must be talking or at least one must be dead
+ltl talking { [](connections[0].b[1] -> <> (talking[0] || talking[1] || dead[0] || dead[1])) &&
+              [](connections[0].b[2] -> <> (talking[0] || talking[2] || dead[0] || dead[2])) &&
+              [](connections[1].b[2] -> <> (talking[1] || talking[2] || dead[1] || dead[2])) }
 
