@@ -137,14 +137,9 @@ proctype recvMessage(byte id; byte read) {
 }
 
 proctype Senior(byte id) {
-    //byte state;         // My current state
     byte read;          // Index to read from
-    //byte recvMsg;       // Message recieved on a channel
-    //byte talkTo;        // Process being talked to
-    //byte notFin[N_SENIORS];  // Records if the seniors are done
     byte i;             // Counter
     byte notDoneCount;  // Counter for notDone
-    //byte die;           // Represents if this Senior should die
 
     // Initialise, state, connections and death
 start: 
