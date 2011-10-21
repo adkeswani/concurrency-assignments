@@ -429,6 +429,10 @@ int main (int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &nSeniors);
 
     //LOG("Initialised senior with ID %d, number of seniors %d\n", id, nSeniors);
+    if (argc != 3) {
+        printf("Usage: lse <test file> <death prob>\n");
+        return 0;
+    }
 
     //Seed random
     srand(time(NULL));

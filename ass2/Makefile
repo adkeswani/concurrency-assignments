@@ -5,7 +5,7 @@ default: all
 all: $(PROGRAM)
 
 # Source files
-SRCS=lseTim.c
+SRCS=lse.c
 OBJS=$(SRCS:.c=.o)
 
 # Compilation variables
