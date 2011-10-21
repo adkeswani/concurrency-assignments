@@ -1,4 +1,4 @@
-#define N_SENIORS 5
+#define N_SENIORS 4
 
 // States
 #define ST_NOTHING      1
@@ -19,7 +19,7 @@
 #define CAN_DIE         0
 
 // Nice flag for switching fully connected graph
-#define FULLY_CONN      0
+#define FULLY_CONN      1
 
 // Constants
 #define NO_TALKING      255
@@ -62,8 +62,10 @@ byte numMoments
 // (Auxiliary) Track number of dead seniors
 byte numDead
 
-// (Auxiliary) Track seniors who are talking and dead
-bool talking[N_SENIORS]
+// (Auxiliary) Track seniors who are talking
+byte talking[N_SENIORS]
+
+// (Auxiliary) Track seniors who are talking
 bool dead[N_SENIORS]
 
 proctype recvMessage(byte id; byte read) {
@@ -288,7 +290,7 @@ start:
 
     // For LTL to ensure everyone is talking if they can
     if
-    :: states[id] == ST_TALK -> talking[id] = true
+    :: states[id] == ST_TALK -> talking[id] = talkTo[id];
     :: states[id] == ST_DEAD -> dead[id] = true
     :: else -> skip
     fi;
@@ -315,6 +317,7 @@ init {
         :: i != N_SENIORS ->
             j = i;
             connections[i].b[j] = 0;
+            talking[i] = NO_TALKING;
             printf("Connections[%d][%d] = %d\n", i, j, 0);
             j++;
             do
@@ -367,7 +370,22 @@ ltl conv4 { []((numConversations / 2 + numMoments + numDead) <= N_SENIORS) };
 
 // Verify there are no seniors who could be talking but aren't
 // For connected seniors, at least one must be talking or at least one must be dead
-ltl talking { [](connections[0].b[1] -> <> (talking[0] || talking[1] || dead[0] || dead[1])) &&
-              [](connections[0].b[2] -> <> (talking[0] || talking[2] || dead[0] || dead[2])) &&
-              [](connections[1].b[2] -> <> (talking[1] || talking[2] || dead[1] || dead[2])) }
+//ltl talking { [](connections[0].b[1] -> <> (talking[0] || talking[1] || dead[0] || dead[1])) &&
+//              [](connections[0].b[2] -> <> (talking[0] || talking[2] || dead[0] || dead[2])) &&
+//              [](connections[1].b[2] -> <> (talking[1] || talking[2] || dead[1] || dead[2])) }
+
+// Make sure talking is reciprocal
+ltl talking1 { [](talking[0] == 1 -> <>(talking[1] == 0)) };
+ltl talking2 { [](talking[0] == 2 -> <>(talking[2] == 0)) };
+ltl talking3 { [](talking[1] == 2 -> <>(talking[2] == 1)) };
+
+// Ensure no-two connected senior moments
+ltl momnt1 { [](connections[0].b[1] == 1 -> !(states[0] == ST_MOMENT && states[1] == ST_MOMENT)) };
+ltl momnt2 { [](connections[0].b[2] == 1 -> !(states[0] == ST_MOMENT && states[2] == ST_MOMENT)) };
+ltl momnt3 { [](connections[1].b[2] == 1 -> !(states[1] == ST_MOMENT && states[2] == ST_MOMENT)) };
+
+// Ensure death occurs
+ltl death1 { [](shouldDie[0] == 1 -> <>(states[0] == ST_DEAD) ) };
+ltl death2 { [](shouldDie[1] == 1 -> <>(states[1] == ST_DEAD) ) };
+ltl death3 { [](shouldDie[2] == 1 -> <>(states[2] == ST_DEAD) ) };
 
