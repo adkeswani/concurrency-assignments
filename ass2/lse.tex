@@ -53,7 +53,7 @@ In order to implement the \emph{Life Stories Exchange} system, we make use of th
               \item Senior $x$ or $y$ is not talking to another senior $z$ where $z \notin \{x,y\}$.
           \end{itemize}
           Therefore, as our algorithm executes the value of $conn(x,y)$ may change.
-    \item For each ordered pair of connected seniors $(x,y)$ there exists a one-directional message passing channel, $Chan(x,y)$, where senior $x$ sends to senior $y$.
+    \item For each ordered pair of connected seniors $(x,y)$ there exists a one-directional message passing channel, $C(x,y)$, where senior $x$ sends to senior $y$.
           Therefore, two message passing channels exist between each pair of connected seniors.
 \end{itemize}
 
@@ -118,33 +118,35 @@ In summary, five types of messages can be sent:
 \subsection{Senior State Machine}
 We use a state machine to model the how the stages of the message protocol impact the behaviour senior, shown in Fig. \ref{fig:senior-state-machine}.
 The red states and transitions represent the sending phase of the message protocol, while the blue states and transitions represent the receiving phase.
-The notation $x!\texttt{MSG}$ and $x?\texttt{MSG}$ is shorthand for sending and receiving from senior with id $x$ (for example $x!\texttt{MSG}$ expands to $Chan(id,x)?\texttt{MSG}$)
+Note, where a channel is not specified for a read/write, it is assumed any appropriate incoming/outgoing channel for that senior is sufficient.
 
 \begin{figure}[h]
    \centering
    \begin{tikzpicture}[->,>=triangle 60, on grid,auto]
-
+   \tikzstyle{state} = [circle, draw, minimum size=2.7cm]
+   \tikzstyle{accepting} = [style={double distance=0.1cm}]
+ 
    % Nodes
-      \node[state,initial above,minimum size=2.7cm,color=red]    (noth)  at (4.5,8)   {\texttt{ST\_NOTHING}};
-      \node[state,accepting,minimum size=2.7cm]        (talk)  at (4,0)     {\texttt{ST\_TALK}};
-      \node[state,accepting,minimum size=2.7cm]        (dead)  at (11,8)    {\texttt{ST\_DEAD}};
-      \node[state,accepting,minimum size=2.7cm]        (momt)  at (-1.0,8)  {\texttt{ST\_MOMENT}};
-      \node[state,minimum size=2.7cm,color=blue]                  (sreq)  at (8,4)   {\texttt{ST\_SENT\_REQ}};
-      \node[state,minimum size=2.7cm,color=blue]                  (wcnf)  at (0.0,4)     {\texttt{ST\_WAIT\_CONF}};
+      \node[state,initial above,color=red]    (noth)  at (5,9)   {\texttt{ST\_NOTHING}};
+      \node[state,accepting]        (talk)  at (5,-0.5)     {\texttt{ST\_TALK}};
+      \node[state,accepting]        (dead)  at (11,9)    {\texttt{ST\_DEAD}};
+      \node[state,accepting]        (momt)  at (-1.0,9)  {\texttt{ST\_MOMENT}};
+      \node[state,color=blue]                  (sreq)  at (7,4)   {\texttt{ST\_SENT\_REQ}};
+      \node[state,color=blue]                  (wcnf)  at (-0.5,4)     {\texttt{ST\_WAIT\_CONF}};
 
    % Paths
-      \path (noth) edge [bend left=00]  node[above]       {$\begin{array}{c} \textrm{all connected} \\ \textrm{dead/talking} \end{array}$} (momt)
-                   edge [bend left=00]  node[above]       {dies} (dead)
-                   edge [bend left=40,color=red]  node[above right] {\texttt{!MSG\_REQ}} (sreq);
-      \path (sreq) edge [bend left=00]  node[below right] {dies} (dead)
-                   edge [loop right,color=blue]    node[right]       {\texttt{?MSG\_DECL}} (sreq)
-                   edge [bend left=00,color=blue]  node[above]       {$x$\texttt{?MSG\_REQ} $\rightarrow$ $x$\texttt{!MSG\_ACK}} (wcnf)
-                   edge [bend right=20,color=blue] node[below left]  {$\begin{array}{l} \textrm{No more} \\ \textrm{messages} \end{array}$} (noth)
-                   edge [bend left=00,color=blue]  node[below right] {$x$\texttt{?MSG\_ACK} $\rightarrow$ $x$\texttt{!MSG\_CONF}} (talk);
-      \path (wcnf) edge [bend left=00,color=blue]  node[above right] {$x$\texttt{?MSG\_CONF}} (talk)
-                   edge [loop below,color=blue]    node[below]       {$\begin{array}{c}\texttt{?MSG\_ACK/MSG\_DECL} \rightarrow \\ \texttt{!MSG\_DECL} \end{array}$} (wcnf)
-                   edge [bend left=20,color=blue]  node[below right] {$x$\texttt{?MSG\_DECL}} (noth);
-      \path (talk) edge [loop right,color=red]    node[right]       {\texttt{!MSG\_FIN}} (talk);
+      \path (noth) edge [bend left=00]             node[above]       {$\begin{array}{c} \textrm{all connected} \\ \textrm{dead/talking} \end{array}$} (momt)
+                   edge [bend left=00]             node[above]       {dies} (dead)
+                   edge [bend left=40,color=red]   node[above right] {\texttt{!MSG\_REQ}} (sreq);
+      \path (sreq) edge [bend left=00]             node[below right] {dies} (dead)
+                   edge [loop right,color=blue]    node[right]       {$\begin{array}{l} \texttt{?MSG\_DECL}; \\ C(x,id)\texttt{?MSG\_FIN} \\ \rightarrow conn(id,x) := 0 \end{array}$} (sreq)
+                   edge [bend left=00,color=blue]  node[above]       {$\begin{array}{c} C(x,id)\texttt{?MSG\_REQ} \rightarrow \\ C(id,x)\texttt{!MSG\_ACK}\end{array}$} (wcnf)
+                   edge [bend right=25,color=blue] node[below left]  {$\begin{array}{l} \textrm{No more} \\ \textrm{messages} \end{array}$} (noth)
+                   edge [bend left=00,color=blue]  node[right]       {$\begin{array}{l}C(x,id)\texttt{?MSG\_ACK} \rightarrow \\ C(id,x)\texttt{!MSG\_CONF}\end{array}$} (talk);
+      \path (wcnf) edge [bend left=00,color=blue]  node[above right] {$C(x,id)$\texttt{?MSG\_CONF}} (talk)
+                   edge [loop below,color=blue]    node[below]       {$\begin{array}{c}\texttt{?MSG\_ACK/MSG\_DECL} \rightarrow \\ \texttt{!MSG\_DECL}; \\ C(x,id)\texttt{?MGS\_FIN} \rightarrow \\ conn(id,x) := 0\end{array}$} (wcnf)
+                   edge [bend left=30,color=blue]  node[below right] {$C(x,id)$\texttt{?MSG\_DECL}} (noth);
+      \path (talk) edge [loop right,color=red]     node[right]       {\texttt{!MSG\_FIN}} (talk);
    \end{tikzpicture}
    \caption{Senior State Machine}
    \label{fig:senior-state-machine}
@@ -167,7 +169,6 @@ Whereas messages from other seniors are rejected.
 
 It should be noted that the sending of the broadcast \texttt{MSG\_FIN} constitutes part of the sending phase.
 This is because such messages will not be received until the next receiving phase after they have been sent.
-Also, the receiving of these messages is not recorded on the diagram, but it is assumed they do not cause any state transition.
 
 The points at which seniors can die are also strictly maintained.
 Seniors cannot die when in the state \texttt{ST\_WAIT\_CONF} as they may not send another message once in this state.
@@ -178,7 +179,7 @@ Finally, it should be noted that the state machine ensures that any senior sends
 \subsection{Death Detection}
 To detect death we exploit two properties of our solution:
 \begin{itemize}
-    \item For each valid channel $Chann(x,y)$ at least one message is sent along it each round.
+    \item For each valid channel $C(x,y)$ at least one message is sent along it each round.
     \item Reading of messages is performed concurrently
 \end{itemize}
 
